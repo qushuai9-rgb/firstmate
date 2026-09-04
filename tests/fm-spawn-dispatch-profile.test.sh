@@ -144,7 +144,7 @@ test_pi_night_fallback_uses_dasein_without_dispatch_profile() {
   cat > "$FAKEBIN_DIR/date" <<'SH'
 #!/usr/bin/env bash
 if [ "${1:-}" = +%H ]; then
-  printf '23\\n'
+  printf '23\n'
 else
   exec /bin/date "$@"
 fi
