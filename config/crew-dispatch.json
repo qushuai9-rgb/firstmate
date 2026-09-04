@@ -1,0 +1,56 @@
+{
+  "rules": [
+    {
+      "when": "The task involves reading or analyzing images, screenshots, charts, K-line graphs, or any visual artifact that must be inspected or described.",
+      "use": {
+        "harness": "pi",
+        "model": "dasein/gpt-5.6-sol",
+        "effort": "medium"
+      },
+      "why": "Visual tasks use Dasein GPT-5.6 Sol, which has been verified to accept image input."
+    },
+    {
+      "when": "The local time is between 08:00 and 18:00 (daytime work hours) and the task is planning, design, strategy, analysis, investigation, or research that needs deeper reasoning.",
+      "use": {
+        "harness": "pi",
+        "model": "bosch/glm-5.3-flash",
+        "effort": "high"
+      },
+      "why": "Captain directive: daytime 8am-6pm planning tasks use Bosch GLM-5.3 Flash at high effort."
+    },
+    {
+      "when": "The local time is between 08:00 and 18:00 (daytime work hours) and the task is execution-stage work: writing code from a decided plan, running a defined experiment, performing a routine check, or any bounded implementation.",
+      "use": {
+        "harness": "pi",
+        "model": "bosch/glm-5.3-flash",
+        "effort": "medium"
+      },
+      "why": "Captain directive: daytime 8am-6pm execution tasks use Bosch GLM-5.3 Flash at medium effort."
+    },
+    {
+      "when": "The local time is outside 08:00-18:00 (nighttime) and the task is planning, design, strategy, analysis, investigation, or research that needs deeper reasoning.",
+      "use": {
+        "harness": "pi",
+        "model": "dasein/gpt-5.6-luna",
+        "effort": "high"
+      },
+      "why": "Captain directive: off-hours planning, design, analysis, investigation, and research tasks use Dasein GPT-5.6 Luna at high effort."
+    },
+    {
+      "when": "The local time is outside 08:00-18:00 (nighttime) and the task is execution-stage work with explicit decided steps.",
+      "use": {
+        "harness": "pi",
+        "model": "dasein/gpt-5.6-luna",
+        "effort": "medium"
+      },
+      "why": "Captain directive: off-hours execution tasks use Dasein GPT-5.6 Luna at medium effort."
+    }
+  ],
+  "default": [
+    {
+      "harness": "pi",
+      "model": "dasein/gpt-5.6-luna",
+      "effort": "medium"
+    }
+  ]
+}

@@ -3019,6 +3019,21 @@ else
   fi
 fi
 
+# Time-of-day default model for pi-family crewmate/spawn when no explicit --model was
+# given and no dispatch profile resolved one: 08:00-18:00 local -> bosch glm-5.3-flash
+# (captain's daytime bosch usage), otherwise -> dasein/gpt-5.6-luna (night off-peak).
+# Explicit --model and secondmate pins still win; this only fills an empty MODEL.
+if [ -z "$MODEL" ] && [ ! -f "$CONFIG/crew-dispatch.json" ] && \
+   [ "$KIND" != secondmate ] && \
+   { [ "$HARNESS" = pi ] || [ "$HARNESS" = pi-signed ]; }; then
+  HH=$(date +%H)
+  if [ "$HH" -ge 8 ] && [ "$HH" -lt 18 ]; then
+    MODEL=bosch/glm-5.3-flash
+  else
+    MODEL=dasein/gpt-5.6-luna
+  fi
+fi
+
 META_WINDOW=$T
 [ "$BACKEND" = orca ] && META_WINDOW=$W
 SPAWN_GEN="s$(date +%s).${BASHPID:-$$}.$RANDOM"

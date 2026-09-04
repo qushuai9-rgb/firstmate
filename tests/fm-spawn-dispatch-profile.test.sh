@@ -136,6 +136,31 @@ test_no_profile_keeps_claude_profile_defaults() {
   pass "no --model/--effort records defaults and types the claude launch instructions"
 }
 
+test_pi_night_fallback_uses_dasein_without_dispatch_profile() {
+  local rec id out status launch
+  id=profile-pi-night-fallback-z1a
+  rec=$(make_spawn_case profile-pi-night-fallback pi "$id")
+  read_case_record "$rec"
+  cat > "$FAKEBIN_DIR/date" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = +%H ]; then
+  printf '23\\n'
+else
+  exec /bin/date "$@"
+fi
+SH
+  chmod +x "$FAKEBIN_DIR/date"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
+  status=$?
+  expect_code 0 "$status" "Pi spawn without a dispatch profile should use the nighttime fallback"
+  assert_meta_profile "$HOME_DIR/state/$id.meta" pi dasein/gpt-5.6-luna default
+  launch=$(cat "$LAUNCH_LOG")
+  assert_contains "$launch" "--model 'dasein/gpt-5.6-luna'" \
+    "Pi nighttime fallback did not pass Dasein GPT-5.6 Luna to the launch"
+  pass "Pi nighttime fallback uses Dasein GPT-5.6 Luna when no dispatch profile supplies a model"
+}
+
 test_non_cursor_launch_clears_inherited_cursor_markers() {
   local rec id out status launch
   id=profile-claude-cursor-markers-z1b
@@ -796,6 +821,7 @@ test_active_dispatch_profile_does_not_block_secondmate_launch() {
 }
 
 test_no_profile_keeps_claude_profile_defaults
+test_pi_night_fallback_uses_dasein_without_dispatch_profile
 test_non_cursor_launch_clears_inherited_cursor_markers
 test_relative_home_overrides_launch_with_absolute_cross_process_paths
 test_home_defaults_preserve_absolute_or_resolve_relative_paths
