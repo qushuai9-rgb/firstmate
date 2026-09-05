@@ -13,19 +13,19 @@
       "when": "The local time is Monday through Friday between 08:00 and 18:00 (daytime work hours) and the task is planning, design, strategy, analysis, investigation, or research that needs deeper reasoning.",
       "use": {
         "harness": "pi",
-        "model": "bosch/glm-5.3-flash",
+        "model": "dasein/gpt-5.6-luna",
         "effort": "high"
       },
-      "why": "Captain directive: weekday daytime 8am-6pm planning tasks use Bosch GLM-5.3 Flash at high effort."
+      "why": "Captain directive: all non-visual planning tasks use Dasein GPT-5.6 Luna at high effort."
     },
     {
       "when": "The local time is Monday through Friday between 08:00 and 18:00 (daytime work hours) and the task is execution-stage work: writing code from a decided plan, running a defined experiment, performing a routine check, or any bounded implementation.",
       "use": {
         "harness": "pi",
-        "model": "bosch/glm-5.3-flash",
+        "model": "dasein/gpt-5.6-luna",
         "effort": "medium"
       },
-      "why": "Captain directive: weekday daytime 8am-6pm execution tasks use Bosch GLM-5.3 Flash at medium effort."
+      "why": "Captain directive: all non-visual execution tasks use Dasein GPT-5.6 Luna at medium effort."
     },
     {
       "when": "The local time is outside Monday-Friday 08:00-18:00 (including weekends and nighttime) and the task is planning, design, strategy, analysis, investigation, or research that needs deeper reasoning.",
@@ -34,7 +34,7 @@
         "model": "dasein/gpt-5.6-luna",
         "effort": "high"
       },
-      "why": "Captain directive: off-hours planning, design, analysis, investigation, and research tasks use Dasein GPT-5.6 Luna at high effort."
+      "why": "Captain directive: all non-visual planning, design, analysis, investigation, and research tasks use Dasein GPT-5.6 Luna at high effort."
     },
     {
       "when": "The local time is outside Monday-Friday 08:00-18:00 (including weekends and nighttime) and the task is execution-stage work with explicit decided steps.",
@@ -43,7 +43,7 @@
         "model": "dasein/gpt-5.6-luna",
         "effort": "medium"
       },
-      "why": "Captain directive: off-hours execution tasks use Dasein GPT-5.6 Luna at medium effort."
+      "why": "Captain directive: all non-visual execution tasks use Dasein GPT-5.6 Luna at medium effort."
     }
   ],
   "default": [

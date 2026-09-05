@@ -3019,20 +3019,13 @@ else
   fi
 fi
 
-# Time-of-day default model for Pi-family crewmate, scout, and ship launches when no
-# explicit --model was given and no dispatch profile resolved one: Monday-Friday
-# 08:00-18:00 local -> bosch/glm-5.3-flash, otherwise -> dasein/gpt-5.6-luna.
+# Default model for Pi-family crewmate, scout, and ship launches when no explicit
+# model was given and no dispatch profile resolved one: Dasein GPT-5.6 Luna.
 # Explicit --model still wins; secondmate pins are outside this fallback and retain precedence.
 if [ -z "$MODEL" ] && [ ! -f "$CONFIG/crew-dispatch.json" ] && \
    [ "$KIND" != secondmate ] && \
    { [ "$HARNESS" = pi ] || [ "$HARNESS" = pi-signed ]; }; then
-  HH=$(date +%H)
-  DOW=$(date +%u)
-  if [ "$DOW" -le 5 ] && [ "$HH" -ge 8 ] && [ "$HH" -lt 18 ]; then
-    MODEL=bosch/glm-5.3-flash
-  else
-    MODEL=dasein/gpt-5.6-luna
-  fi
+  MODEL=dasein/gpt-5.6-luna
 fi
 
 META_WINDOW=$T
