@@ -208,8 +208,10 @@
 #     __GEMINISETTINGS__ firstmate-owned per-task gemini settings file (busy-state hooks)
 #     __ROVOBIN__   resolved, rovo-verified executable for a rovo launch
 # Verified per-harness turn-end hooks are installed automatically where enabled; some live outside the worktree.
-# Kimi uses one surgically installed Firstmate region in $HOME/.kimi-code/config.toml,
-# a firstmate-owned global hook and registry, and a gitignored per-task pointer.
+# Kimi uses one surgically installed Firstmate region in
+# ${KIMI_SHARE_DIR:-$HOME/.kimi}/config.toml, a firstmate-owned global hook and
+# registry, and a gitignored per-task pointer. The same KIMI_SHARE_DIR value is
+# exported into the worker so its CLI and the hook use one directory.
 # grok uses a firstmate-owned global hook under ${GROK_HOME:-$HOME/.grok}/hooks
 # plus a gitignored .fm-grok-turnend worktree pointer and a state token.
 # muse installs no hook at all - its plugin engine is off in the default build - so
@@ -321,6 +323,10 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 PROJECTS="${FM_PROJECTS_OVERRIDE:-$FM_HOME/projects}"
 CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
+# Kimi CLI 1.50.0 and later use KIMI_SHARE_DIR, defaulting to ~/.kimi.
+# Keep one resolved value available for template substitution; validate it only
+# when the selected launch is Kimi so unrelated raw launches remain unchanged.
+KIMI_SHARE_DIR="${KIMI_SHARE_DIR:-${HOME:-}/.kimi}"
 # shellcheck source=bin/fm-config-inherit-lib.sh
 . "$SCRIPT_DIR/fm-config-inherit-lib.sh"
 if ! LAUNCH_ENV_ENABLED=$(fm_config_source_present "$CONFIG/launch-env-allowlist"); then
@@ -977,7 +983,7 @@ spawn_herdr_presentation_order_lock_acquire() {
 }
 
 clear_relaunch_harness_wiring() {
-  local harness=$1 wt=$2 state=$3 id=$4 token_path token auth_path path
+  local harness=$1 wt=$2 state=$3 id=$4 token_path token share_dir auth_path path
   # The wiring arms above match on harness PREFIXES, because a task launched
   # from a raw command records that command's basename rather than the exact
   # adapter name. The retirement tables are keyed by the exact adapter, so the
@@ -990,8 +996,9 @@ clear_relaunch_harness_wiring() {
   token=
   if [ -n "$token_path" ] && [ -f "$token_path" ]; then
     IFS= read -r token < "$token_path" || [ -n "$token" ] || return 1
+    share_dir=$(sed -n 's/^share_dir=//p' "$token_path" | head -1)
   fi
-  auth_path=$(fm_control_harness_turnend_auth_path "$harness" "$token") || return 1
+  auth_path=$(fm_control_harness_turnend_auth_path "$harness" "$token" "$share_dir") || return 1
   if [ -n "$auth_path" ]; then
     rm -f -- "$auth_path" || return 1
   fi
@@ -1407,7 +1414,7 @@ launch_template() {
     # only an absolute brief pointer after the TUI readiness gate below.
     # Its turn-end signal is a globally configured Stop hook plus a guarded
     # per-task worktree token, so no launch placeholder belongs here.
-    kimi) printf '%s' '__KIMIBIN__ __MODELFLAG__--auto' ;;
+    kimi) printf '%s' 'KIMI_SHARE_DIR=__KIMISHARE__ __KIMIBIN__ __MODELFLAG__--auto-approve' ;;
     # muse (Muse Code): a positional prompt starts the supervised interactive
     # session. --yolo is the single flag that makes a crewmate pane viable: muse
     # ships approval prompts AND a filesystem/network sandbox ON by default
@@ -1594,7 +1601,7 @@ resolve_kimi_binary() {
         ;;
     esac
   fi
-  fallback="${HOME:-}/.kimi-code/bin/kimi"
+  fallback="${KIMI_SHARE_DIR:-${HOME:-}/.kimi}/bin/kimi"
   if [ -n "${HOME:-}" ] && [ -x "$fallback" ]; then
     printf '%s\n' "$fallback"
     return 0
@@ -1775,10 +1782,12 @@ esac
 
 case "$LAUNCH" in
   *__KIMIBIN__*)
+    KIMI_SHARE_DIR=$(resolve_directory_input KIMI_SHARE_DIR "$KIMI_SHARE_DIR") || exit 1
     KIMI_BIN=$(resolve_kimi_binary) || exit 1
     LAUNCH=${LAUNCH//__KIMIBIN__/$(shell_quote "$KIMI_BIN")}
+    LAUNCH=${LAUNCH//__KIMISHARE__/$(shell_quote "$KIMI_SHARE_DIR")}
     if [ "$KIND" != secondmate ]; then
-      "$FM_ROOT/bin/fm-kimi-turnend-hook.sh" install || {
+      KIMI_SHARE_DIR="$KIMI_SHARE_DIR" "$FM_ROOT/bin/fm-kimi-turnend-hook.sh" install || {
         echo "error: refusing Kimi spawn because the global turn-end hook could not be installed safely" >&2
         exit 1
       }
@@ -3224,13 +3233,16 @@ EOF
       # task's token pointer and the token resolves through Firstmate's private
       # registry. The installer above owns the format-preserving config edit and
       # the always-zero, silent hook script.
-      KIMI_AUTH_DIR="$HOME/.kimi-code/fm-turn-end.d"
+      KIMI_AUTH_DIR="$KIMI_SHARE_DIR/fm-turn-end.d"
       old_umask=$(umask)
       umask 077
       auth_file=$(mktemp "$KIMI_AUTH_DIR/fm.XXXXXXXXXXXX")
       umask "$old_umask"
       printf '%s\n' "$TURNEND" > "$auth_file"
-      printf '%s\n' "${auth_file##*/}" > "$STATE/$ID.kimi-turnend-token"
+      {
+        printf '%s\n' "${auth_file##*/}"
+        printf 'share_dir=%s\n' "$KIMI_SHARE_DIR"
+      } > "$STATE/$ID.kimi-turnend-token"
       printf 'token=%s\n' "${auth_file##*/}" > "$WT/.fm-kimi-turnend"
       exclude_path '.fm-kimi-turnend'
       ;;
@@ -3426,6 +3438,7 @@ LAUNCH=${LAUNCH//__PIEXT__/$sq_piext}
 LAUNCH=${LAUNCH//__PITURNEND__/$sq_piturnend}
 LAUNCH=${LAUNCH//__PIWATCH__/$sq_piwatch}
 LAUNCH=${LAUNCH//__OPINPUT__/$sq_opinput}
+LAUNCH=${LAUNCH//__KIMISHARE__/$(shell_quote "$KIMI_SHARE_DIR")}
 case "$HARNESS" in
   pi|pi-signed) LAUNCH=${LAUNCH//__PIBIN__/"$(shell_quote "$PI_BIN")"} ;;
   cursor) LAUNCH=${LAUNCH//__CURSORBIN__/"$(shell_quote "$CURSOR_BIN")"} ;;

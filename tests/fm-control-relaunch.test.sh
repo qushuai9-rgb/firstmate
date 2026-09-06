@@ -697,7 +697,7 @@ test_turnend_auth_paths_are_owned_by_the_control_adapter() {
   [ "$grok_path" = "$dir/gh/hooks/fm-turn-end.d/fm.111111111111" ] \
     || fail "grok's registry path should resolve under GROK_HOME, got '$grok_path'"
   kimi_path=$(HOME="$dir/kh" fm_control_harness_turnend_auth_path kimi fm.222222222222)
-  [ "$kimi_path" = "$dir/kh/.kimi-code/fm-turn-end.d/fm.222222222222" ] \
+  [ "$kimi_path" = "$dir/kh/.kimi/fm-turn-end.d/fm.222222222222" ] \
     || fail "kimi's registry path should resolve under the home store, got '$kimi_path'"
   grok_path=$(GROK_HOME="$dir/gh" fm_control_harness_turnend_auth_path grok 'not a token/../..')
   [ -z "$grok_path" ] || fail "a malformed token must resolve to no path, got '$grok_path'"

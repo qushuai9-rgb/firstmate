@@ -1,19 +1,19 @@
 # Kimi Code
 
-Verified on 2026-07-25 with Kimi Code CLI 0.29.1.
+Verified on 2026-09-06 with Kimi CLI 1.50.0.
 
 ## Operating facts
 
 | Fact | Value |
 |---|---|
-| Binary | Absolute executable resolved from `PATH`, then executable `$HOME/.kimi-code/bin/kimi`; spawning refuses if neither exists. |
-| Launch | Bare interactive TUI with `--auto`, followed by readiness-gated pointer delivery; positional prompts are rejected. |
+| Binary | Absolute executable resolved from `PATH`, then executable `$KIMI_SHARE_DIR/bin/kimi` or `$HOME/.kimi/bin/kimi`; spawning refuses if neither exists. |
+| Launch | Bare interactive TUI with `--auto-approve`, followed by readiness-gated pointer delivery; positional prompts are rejected. |
 | Models | Observed default `kimi-code/kimi-for-coding`, `kimi-code/kimi-for-coding-highspeed`, `kimi-code/k3`, and `kimi-code/k3-256k`; use `kimi provider list --json` for current configuration. |
 | Busy state | Standalone Kimi is unknown pending a live-verified semantic source, preferring Wire's `prompt` lifetime then documented hooks including `Interrupt`; Kimi behind Pi uses Pi lifecycle, and the moon-phase spinner is never a state source. |
 | Exit command | `/exit`. |
 | Interrupt | Single Escape, which prints `Interrupted by user`. |
 | Skill invocation | `/<skill>`, for example `/no-mistakes`; Firstmate skills are discovered. |
-| Autonomy | `--auto`; `-y` and `--yolo` are weaker and are not used. |
+| Autonomy | `--auto-approve` (also accepted as `--yolo`, `--yes`, or `-y`); Firstmate uses the explicit `--auto-approve` spelling. |
 | Trust dialog | None observed on a clean first launch in a fresh pooled worktree. |
 | Slash submission | One Enter submits, with no popup swallow or settle hazard. |
 | Environment marker | None; detection uses process ancestry command name `kimi`. |
@@ -43,7 +43,7 @@ The delivery-only spinner match covers the full moon-phase glyph set but remains
 Kimi is outside the primary turn-end guard scope.
 `../../../docs/turnend-guard.md` owns its separate global hook surface and captain-approved crew wake integration.
 
-`../../../bin/fm-spawn.sh` installs one marker-delimited Firstmate entry in `$HOME/.kimi-code/config.toml`, one silent always-zero hook script, and one private token registry under `$HOME/.kimi-code/fm-turn-end.d/`.
+`../../../bin/fm-spawn.sh` uses Kimi's `KIMI_SHARE_DIR` environment variable, defaulting to `$HOME/.kimi`, and installs one marker-delimited Firstmate entry in its `config.toml`, one silent always-zero hook script, and one private token registry under its `fm-turn-end.d/` directory.
 Each Kimi worker worktree receives a gitignored `.fm-kimi-turnend` pointer.
 The global hook touches `state/<id>.turn-ended` only when the Stop payload's `cwd`, pointer, and registry entry all agree.
 A guarded silent hook cannot be verified from absence of effect, so prove invocation with an unguarded probe before concluding it did not fire.
