@@ -2679,7 +2679,7 @@ kimi_wait_for_ready() {
   local pane i=0 max=${FM_KIMI_READY_POLLS:-60} interval=${FM_KIMI_POLL_INTERVAL:-0.5}
   while [ "$i" -lt "$max" ]; do
     pane=$(kimi_capture)
-    if printf '%s\n' "$pane" | grep -Fq 'Welcome to Kimi Code!' \
+    if printf '%s\n' "$pane" | grep -Fq 'Welcome to Kimi Code CLI!' \
        || kimi_composer_is_empty; then
       return 0
     fi
