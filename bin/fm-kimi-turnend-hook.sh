@@ -2,7 +2,7 @@
 # Install or remove Firstmate's guarded Kimi crew turn-end hook.
 #
 # This command is the sole owner of the text-level edit to
-# $HOME/.kimi-code/config.toml. It validates the existing TOML but never
+# ${KIMI_SHARE_DIR:-$HOME/.kimi}/config.toml. It validates the existing TOML but never
 # serializes it: install adds or replaces one marker-delimited Firstmate region,
 # and remove excises only that region. Missing, malformed, symlinked, partially
 # marked, or otherwise surprising config is refused without a config write.
@@ -10,7 +10,7 @@
 # The installed Stop hook always exits 0 and stays silent. It reads cwd from the
 # hook payload, checks for a .fm-kimi-turnend pointer before registry work, and
 # touches a task turn-end marker only when the pointer names a Firstmate-created
-# token in $HOME/.kimi-code/fm-turn-end.d/.
+# token in ${KIMI_SHARE_DIR:-$HOME/.kimi}/fm-turn-end.d/.
 #
 # Usage:
 #   fm-kimi-turnend-hook.sh install
@@ -42,9 +42,19 @@ if [ "$ACTION" = install ] && ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-python3 - "$ACTION" "$HOME/.kimi-code" <<'PY'
+KIMI_SHARE_DIR=${KIMI_SHARE_DIR:-${HOME:-}/.kimi}
+case "$KIMI_SHARE_DIR" in
+  /*) ;;
+  *)
+    printf 'fm-kimi-turnend-hook: refused: KIMI_SHARE_DIR must be an absolute path.\n' >&2
+    exit 1
+    ;;
+esac
+
+python3 - "$ACTION" "$KIMI_SHARE_DIR" <<'PY'
 import os
 import re
+import shlex
 import shutil
 import stat
 import sys
@@ -87,8 +97,8 @@ IFS= read -r -n 256 first < "$pointer" 2>/dev/null || [ -n "$first" ] || exit 0
 case "$first" in token=*) token=${first#token=} ;; *) exit 0 ;; esac
 case "$token" in fm.????????????) : ;; *) exit 0 ;; esac
 case "$token" in *[!A-Za-z0-9._-]*) exit 0 ;; esac
-auth_dir=${HOME:-}/.kimi-code/fm-turn-end.d
-[ -n "${HOME:-}" ] || exit 0
+auth_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/fm-turn-end.d" 2>/dev/null && pwd -P) || exit 0
+[ -n "$auth_dir" ] || exit 0
 target=$(cat "$auth_dir/$token" 2>/dev/null) || exit 0
 case "$target" in /*.turn-ended) : ;; *) exit 0 ;; esac
 touch -- "$target" 2>/dev/null || true
@@ -155,14 +165,19 @@ def locate_region(data: bytes):
     return start, after, marker
 
 
-def block(marker: bytes) -> bytes:
+def toml_escape(value: str) -> bytes:
+    return value.replace("\\", "\\\\").replace('"', '\\"').encode("utf-8")
+
+
+def block(marker: bytes, hook: str) -> bytes:
+    command = f"bash {shlex.quote(hook)} >/dev/null 2>&1 || true"
     return b"\n".join(
         (
             marker,
             b"[[hooks]]",
             b'event = "Stop"',
             b'matcher = "^$"',
-            b'command = "bash \\"$HOME/.kimi-code/fm-turn-end.sh\\" >/dev/null 2>&1 || true"',
+            b'command = "' + toml_escape(command) + b'"',
             b"timeout = 1",
             END,
             b"",
@@ -244,11 +259,11 @@ try:
                 refuse(f"Firstmate hook path has unexpected content at {HOOK}.")
         if region is None:
             marker = BEGIN if original.endswith(b"\n") else BEGIN_OWNS_NEWLINE
-            addition = block(marker)
+            addition = block(marker, HOOK)
             candidate = original + (b"" if original.endswith(b"\n") else b"\n") + addition
         else:
             candidate = original[: region[0]] + (
-                (b"\n" if region[2] == BEGIN_OWNS_NEWLINE else b"") + block(region[2])
+                (b"\n" if region[2] == BEGIN_OWNS_NEWLINE else b"") + block(region[2], HOOK)
             ) + original[region[1] :]
         parse_toml(candidate, "updated config.toml")
         os.makedirs(REGISTRY, mode=0o700, exist_ok=True)

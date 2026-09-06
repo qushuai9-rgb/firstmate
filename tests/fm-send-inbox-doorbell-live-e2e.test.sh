@@ -87,7 +87,7 @@ launch_cmd() {  # <name>
     opencode) printf '%s' "OPENCODE_CONFIG_CONTENT='{\"permission\":{\"*\":\"allow\"}}' opencode" ;;
     pi|pi-signed) printf '%s' "$1" ;;
     grok) printf '%s' 'grok --always-approve' ;;
-    kimi) printf '%s' 'kimi --auto' ;;
+    kimi) printf '%s' 'kimi --auto-approve' ;;
     muse) printf '%s' 'MUSE_EXPERIMENTAL_FOREIGN_PERSONAL_CONTEXT_KILL=on muse --yolo' ;;
     *) return 1 ;;
   esac
