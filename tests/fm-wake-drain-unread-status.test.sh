@@ -13,6 +13,7 @@ set -u
 . "$(dirname "${BASH_SOURCE[0]}")/wake-helpers.sh"
 
 DRAIN="$ROOT/bin/fm-wake-drain.sh"
+REPORT="$ROOT/bin/fm-secondmate-report.sh"
 
 TMP_ROOT=$(fm_test_tmproot fm-wake-drain-unread-status-tests)
 
@@ -156,6 +157,81 @@ test_pending_reply_resolution_surfaces_once() {
     fail "an already-presented pending-reply resolution was replayed: $(cat "$out")"
   fi
   pass "a pending-reply resolution buried under a later note surfaces once and closes OPEN DECISIONS"
+}
+
+test_secondmate_parent_reports_surface_in_log_order_once() {
+  local dir state out status mate corr done_line paused_line failed_line
+  dir=$(make_case secondmate-parent-reports)
+  state="$dir/state"
+  out="$dir/drain.out"
+  status="$state/quant-researcher.status"
+  mate="$dir/quant-researcher-home"
+  corr=0123456789abcdef
+  done_line="done [corr=$corr]: experiment completed (via-helper)"
+  paused_line='paused [key=market-data]: awaiting the next market-data window'
+  failed_line='failed [key=experiment-run]: benchmark worker exited unexpectedly'
+
+  printf 'kind=secondmate\n' > "$state/quant-researcher.meta"
+  printf 'blocked [key=pending-reply-%s]: pending-reply-missed: task=quant-researcher pending-reply-id=%s request=report\n' \
+    "$corr" "$corr" > "$status"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" >/dev/null \
+    || fail "drain failed while recording the prior secondmate blocker"
+
+  mkdir -p "$mate/state"
+  printf 'quant-researcher\n' > "$mate/.fm-secondmate-home"
+  cat > "$mate/.fm-secondmate-parent" <<EOF
+schema=fm-secondmate-parent.v1
+route=local
+parent_home=$dir
+EOF
+  FM_HOME="$mate" "$REPORT" done "$corr" 'experiment completed' \
+    || fail "the secondmate report helper failed"
+  printf '%s\n%s\n' "$paused_line" "$failed_line" >> "$status"
+
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" \
+    || fail "drain failed after secondmate parent reports"
+
+  grep -F 'UNREAD STATUS' "$out" >/dev/null \
+    || fail "secondmate reports were not independently surfaced: $(cat "$out")"
+  grep -F "quant-researcher $done_line" "$out" >/dev/null \
+    || fail "the via-helper correlated done report was hidden by the old blocker: $(cat "$out")"
+  [ "$(grep -Fc "quant-researcher $done_line" "$out")" -eq 1 ] \
+    || fail "the correlated done report was duplicated by the outcome backstop: $(cat "$out")"
+  if grep -F 'STATUS OUTCOME BACKSTOP' "$out" >/dev/null; then
+    fail "the already surfaced secondmate report was reprinted by the outcome backstop: $(cat "$out")"
+  fi
+  grep -F "quant-researcher $paused_line" "$out" >/dev/null \
+    || fail "the keyed paused report was not surfaced: $(cat "$out")"
+  grep -F "quant-researcher $failed_line" "$out" >/dev/null \
+    || fail "the keyed failed report was not surfaced: $(cat "$out")"
+  [ "$(grep -nF "quant-researcher $done_line" "$out" | head -1 | cut -d: -f1)" \
+    -lt "$(grep -nF "quant-researcher $paused_line" "$out" | head -1 | cut -d: -f1)" ] \
+    || fail "the done report was not presented before the later pause"
+  [ "$(grep -nF "quant-researcher $paused_line" "$out" | head -1 | cut -d: -f1)" \
+    -lt "$(grep -nF "quant-researcher $failed_line" "$out" | head -1 | cut -d: -f1)" ] \
+    || fail "the paused report was not presented before the later failure"
+
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" \
+    || fail "second drain after secondmate parent reports failed"
+  grep -F "$done_line" "$out" >/dev/null \
+    && fail "the correlated done report was replayed after presentation: $(cat "$out")"
+  grep -F "$paused_line" "$out" >/dev/null \
+    && fail "the keyed paused report was replayed after presentation: $(cat "$out")"
+  grep -F "$failed_line" "$out" >/dev/null \
+    && fail "the keyed failed report was replayed after presentation: $(cat "$out")"
+
+  printf 'kind=ship\n' > "$state/ordinary-worker.meta"
+  printf 'done [corr=%s]: ordinary completion\npaused [key=ordinary-wait]: ordinary pause\nfailed [key=ordinary-failure]: ordinary failure\n' \
+    "$corr" > "$state/ordinary-worker.status"
+  FM_STATE_OVERRIDE="$state" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task ordinary-worker --verdict captain --summary 'ordinary failure was handled' >/dev/null \
+    || fail "could not cover the ordinary worker's latest terminal status"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" \
+    || fail "drain failed while checking ordinary-worker compatibility"
+  if grep -F 'UNREAD STATUS' "$out" >/dev/null; then
+    fail "secondmate report surfacing leaked onto an ordinary worker: $(cat "$out")"
+  fi
+  pass "secondmate correlated and keyed parent reports surface once in append order"
 }
 
 test_unread_output_over_cap_remains_recoverable() {
@@ -379,6 +455,7 @@ test_already_presented_notes_are_not_replayed
 test_brand_new_note_after_presentation_is_surfaced
 test_signal_annotation_surfaces_every_unread_note_not_only_the_newest
 test_pending_reply_resolution_surfaces_once
+test_secondmate_parent_reports_surface_in_log_order_once
 test_unread_output_over_cap_remains_recoverable
 test_snapshot_does_not_ack_a_later_append
 test_retired_task_id_starts_new_status_unread

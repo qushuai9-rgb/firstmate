@@ -9,7 +9,7 @@ This note records why a secondmate home's captain-facing outcomes are delivered 
 A secondmate is a firstmate in its own home, and nobody reads its chat: the captain and the main firstmate see only what is appended to the parent channel.
 On 2026-09-02 four outcomes across two mate homes never reached the captain.
 The watcher had delivered the parent's request within a minute each time, the mate did the work, and then the mate addressed "captain" in its own chat instead of appending to the channel.
-The cause is structural rather than a one-off lapse: `AGENTS.md` tells every firstmate to reach the captain and to address the captain in every response, while the charter's return-channel rule is a smaller, later instruction.
+The cause is structural rather than a one-off lapse: the mate can satisfy the [address rule in `AGENTS.md`](../AGENTS.md#firstmate) in local chat while missing the charter's later return-channel instruction.
 The captain's framing of the requirement was: "the root problem is not specific to PRs, right? it looks like any message or outcomes from second mates can miss. we need to make sure our fixes are addressing this in a principled, fundamental way, not surgically treating the symptoms of just this PR update miss."
 A PR-ready report was the observed symptom, but a finding, a decision, a blocker, and a failure all fail the same way, because every one of them depended on the mate model remembering to write one line.
 
@@ -36,13 +36,15 @@ The ledger delivery reads files only: it calls no harness, no forge, and no curr
 Each delivery is keyed with the first eight hexadecimal characters of its receipt fingerprint and appended at most once by exact line, and the ledger path reuses the inactive scan's per-fingerprint receipts, so a replayed poll or restart cannot deliver an event twice while a genuinely new terminal event is delivered again.
 A duplicate line is harmless and a missed one is not, so the mate may still append its own judgement about a delivered outcome, and the parent reads the script's line as the fact and the mate's line as commentary.
 For marked replies, the report helper accepts no caller-selected destination and uses the channel resolver for both local and remote homes; its script header owns the exact invocation contract.
+The parent drain separately presents each unread `done [corr=<16 hex>]` report and each keyed `paused` or `failed` report from a recorded secondmate as an `UNREAD STATUS` row in status-log order.
+That independent surface prevents an older open decision in the same append-only log from hiding a later parent report, advances the presentation cursor after the report is shown, and leaves ordinary crew status classification unchanged.
 The pending-reply guard may restate only the correlated line from a local mate's `state/<mate-id>.status` onto the parent channel, which repairs the common parent-home versus mate-home mixup without accepting arbitrary mate-home sightings as acknowledgement.
 Other correlated mate-home status lines remain wrong-home evidence, while a remote home's routed `state/parent-replies.status` is already the parent channel and is not classified as wrong-home.
 A missed-reply escalation includes the complete first sighting path and line number in readable shell-escaped form.
 
 ## What is deliberately not built
 
-- No mirror of the mate's chat: every firstmate turn contains captain-facing text by mandate, so choosing which sentence is an outcome would itself be model behavior, and every harness exposes turn text differently.
+- No mirror of the mate's chat: chat can mix outcomes with other conversation, so choosing which sentence is an outcome would itself be model behavior, and every harness exposes turn text differently.
 - No threshold escalation of a child's open decision or blocker: a decision the mate escalates is a captain hold, which is published; a decision the mate neither answers nor escalates is a supervision-quality question, separable from channel delivery.
 - No second watcher or standalone scanner: a lightweight ledger pass runs inside the existing inactive-outcome command on every watcher poll and reuses its receipts and upstream append.
 - No orphan lifecycle: teardown refuses instead of removing an undelivered outcome, the same way it refuses on other unlanded conditions.
@@ -50,6 +52,7 @@ A missed-reply escalation includes the complete first sighting path and line num
 ## Regression coverage
 
 `tests/fm-inactive-reconcile.test.sh` covers the ledger delivery against real ledgers with no harness: immediate done and failed delivery with note, PR, mode, posture, and report pointer, once-only delivery across polls, a line still being appended, the remote route, the yield of the inactive path to a terminal ledger, and the real watcher poll driving it.
+`tests/fm-wake-drain-unread-status.test.sh` covers correlated done and keyed paused or failed parent reports from a secondmate in append order, once-only presentation, and ordinary-worker compatibility.
 `tests/fm-captain-hold-lifecycle.test.sh` covers a mate home publishing a hold, its answer, and a distinct occurrence on re-hold, and a main home publishing nothing.
 `tests/fm-pr-merge.test.sh` covers the PR-ready line at registration and the merge outcome's upward report.
 `tests/fm-teardown.test.sh` covers teardown delivering a child's final line and refusing when the channel cannot be written.
