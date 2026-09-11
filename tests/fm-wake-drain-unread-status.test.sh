@@ -195,6 +195,11 @@ EOF
     || fail "secondmate reports were not independently surfaced: $(cat "$out")"
   grep -F "quant-researcher $done_line" "$out" >/dev/null \
     || fail "the via-helper correlated done report was hidden by the old blocker: $(cat "$out")"
+  [ "$(grep -Fc "quant-researcher $done_line" "$out")" -eq 1 ] \
+    || fail "the correlated done report was duplicated by the outcome backstop: $(cat "$out")"
+  if grep -F 'STATUS OUTCOME BACKSTOP' "$out" >/dev/null; then
+    fail "the already surfaced secondmate report was reprinted by the outcome backstop: $(cat "$out")"
+  fi
   grep -F "quant-researcher $paused_line" "$out" >/dev/null \
     || fail "the keyed paused report was not surfaced: $(cat "$out")"
   grep -F "quant-researcher $failed_line" "$out" >/dev/null \

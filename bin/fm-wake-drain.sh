@@ -350,6 +350,7 @@ print_status_outcome_backstop_section() {  # <task-and-endpoint-snapshot>
         [ -z "$key" ] || continue
         ;;
     esac
+    status_line_is_secondmate_parent_surface "$STATE" "$task" "$event" && continue
     load_branch_outcome_index "$task"
     if [ "$BRANCH_OUTCOME_INDEX_STATE" != ok ]; then
       rc=2
