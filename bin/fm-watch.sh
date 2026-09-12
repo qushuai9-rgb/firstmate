@@ -110,6 +110,14 @@
 #                          external-wait pause rows do not feed this escalation,
 #                          observation is read-only, and one parent notification
 #                          covers each no-progress episode
+#   stale: <window> (turn hang suspect: turn <minutes>m with zero progress and
+#                          zero output growth; consider interrupt+relaunch)
+#                          a local secondmate stayed semantically busy past its
+#                          turn_hang_secs / FM_SECONDMATE_TURN_HANG_SECS bound
+#                          while state/<id>.progress and its durable output roots
+#                          both showed no growth across consecutive confirming
+#                          polls; ordinary crews already reach the busy-turn bound
+#                          through the pane-stale path that secondmates skip
 # For normal supervision, resume the session-start primary-harness protocol
 # after each printed reason. Direct duplicate invocations of this script still
 # no-op through the watcher singleton lock.
@@ -271,6 +279,18 @@ BUSY_TURN_MAX_SECS=${FM_BUSY_TURN_MAX_SECS:-3600}
 # secondmate_wake_stall_tick, never a substitute for it.
 SECONDMATE_WAKE_STALL_SECS=${FM_SECONDMATE_WAKE_STALL_SECS:-}
 case "$SECONDMATE_WAKE_STALL_SECS" in ''|*[!0-9]*|0) SECONDMATE_WAKE_STALL_SECS=180 ;; esac
+# A local secondmate skips the ordinary pane-stale path while working, so the
+# busy-turn age bound that catches a hung ordinary crew never runs for it. This
+# default (30 minutes) is the parent-side turn-in-progress hang bound for mates
+# only: past it, with no native progress marker growth AND no durable output
+# growth, the watcher surfaces one stale wake after consecutive confirming polls.
+# Per-task meta turn_hang_secs= overrides the home default for long backtests.
+SECONDMATE_TURN_HANG_SECS=${FM_SECONDMATE_TURN_HANG_SECS:-}
+case "$SECONDMATE_TURN_HANG_SECS" in ''|*[!0-9]*|0) SECONDMATE_TURN_HANG_SECS=1800 ;; esac
+# Consecutive zero-growth polls required before a secondmate turn hang surfaces.
+# One extra confirmation keeps a single slow-but-healthy poll from alarming.
+SECONDMATE_TURN_HANG_CONFIRM=${FM_SECONDMATE_TURN_HANG_CONFIRM:-}
+case "$SECONDMATE_TURN_HANG_CONFIRM" in ''|*[!0-9]*|0) SECONDMATE_TURN_HANG_CONFIRM=2 ;; esac
 # A crew that declared a pause is idling on a known external wait, so its stale
 # pane is absorbed rather than wedge-escalated.
 # A captain-held or paused crew whose agent has confidently exited uses the same
@@ -837,6 +857,141 @@ EOF
     fi
     fm_wake_secondmate_stall_receipt_write "$task" "$row_key" || return 1
     fm_wake_secondmate_stall_marker_write "$task" "$row_key" || return 1
+    wake "$reason"
+  done
+  return 0
+}
+
+# Per-task turn hang bound for a secondmate: meta turn_hang_secs= wins when it is a
+# positive integer, otherwise the home default SECONDMATE_TURN_HANG_SECS applies.
+secondmate_turn_hang_bound_secs() {  # <meta-file>
+  local meta=$1 raw
+  raw=$(fm_meta_get "$meta" turn_hang_secs)
+  case "$raw" in
+    ''|*[!0-9]*|0) printf '%s\n' "$SECONDMATE_TURN_HANG_SECS" ;;
+    *) printf '%s\n' "$raw" ;;
+  esac
+}
+
+# Clear a secondmate turn-hang observation when the mate is no longer a hang
+# candidate (idle, declared wait, fresh progress, or output growth). The alerted
+# marker is separate so one episode still surfaces only once until the hang ends.
+secondmate_turn_hang_clear_observation() {  # <task>
+  local task=$1
+  rm -f "$STATE/.secondmate-turn-hang-$task" \
+    "$STATE/.secondmate-turn-hang-anchor-$task" \
+    "$STATE/.secondmate-turn-hang-progress-$task"
+}
+
+# Parent-side turn-in-progress hang detector for local secondmates. Ordinary crews
+# already reach busy_turn_over_age through the pane-stale path; secondmates skip
+# that path while working, so a hung mid-turn mate never produced a turn-ended
+# marker and never entered the busy-turn bound. This tick closes that gap without
+# inventing a parallel escalation ladder:
+#   - only kind=secondmate local mates with an exact busy verdict
+#   - age from the same completed-turn / native-progress / spawn-record markers
+#     busy_turn_over_age already trusts, measured against the per-task hang bound
+#   - dual zero-growth: native progress mtime AND durable output roots both quiet
+#     since the observation anchor (secondmate_output_written_since)
+#   - SECONDMATE_TURN_HANG_CONFIRM consecutive confirming polls before one stale wake
+#   - inspection-only wording; never an automatic interrupt or relaunch
+# A declared pause or captain-held transfer keeps the ordinary pause cadence and
+# never feeds this path. One episode surfaces once; clearing requires the hang
+# conditions to end so a later genuine hang can alarm again.
+secondmate_turn_hang_tick() {
+  local meta task kind remote_host home win bound age minutes confirm_need confirm_have
+  local last progress_file progress_snap prev_progress age_src anchor obs reason queued
+  for meta in "$STATE"/*.meta; do
+    [ -e "$meta" ] || continue
+    kind=$(fm_meta_get "$meta" kind)
+    [ "$kind" = secondmate ] || continue
+    remote_host=$(fm_meta_get "$meta" remote_host)
+    [ -z "$remote_host" ] || continue
+    task=${meta##*/}
+    task=${task%.meta}
+    case "$task" in ''|*[!A-Za-z0-9._-]*) continue ;; esac
+    home=$(fm_meta_get "$meta" home)
+    [ -n "$home" ] || continue
+    [ -f "$home/.fm-secondmate-home" ] && [ ! -L "$home/.fm-secondmate-home" ] || continue
+    [ "$(cat "$home/.fm-secondmate-home" 2>/dev/null || true)" = "$task" ] || continue
+    win=$(fm_backend_target_of_meta "$meta")
+    [ -n "$win" ] || continue
+    last=$(last_status_line "$STATE/$task.status")
+    if status_is_paused_or_captain_held "$last"; then
+      secondmate_turn_hang_clear_observation "$task"
+      rm -f "$STATE/.secondmate-turn-hang-alerted-$task"
+      continue
+    fi
+    # Exact busy only. Idle/unknown/dead leave ordinary secondmate supervision alone.
+    if ! window_is_busy "$win" ""; then
+      secondmate_turn_hang_clear_observation "$task"
+      rm -f "$STATE/.secondmate-turn-hang-alerted-$task"
+      continue
+    fi
+    bound=$(secondmate_turn_hang_bound_secs "$meta")
+    # busy_turn_over_age is hard-wired to BUSY_TURN_MAX_SECS; compute the same
+    # marker age against the (possibly tighter) secondmate hang bound here.
+    progress_file="$STATE/$task.progress"
+    age_src="$STATE/$task.turn-ended"
+    [ -e "$age_src" ] || age_src="$meta"
+    if [ -f "$progress_file" ] && [ "$progress_file" -nt "$age_src" ]; then
+      age_src="$progress_file"
+    fi
+    age=$(age_of "$age_src")
+    if [ "$age" -lt "$bound" ]; then
+      secondmate_turn_hang_clear_observation "$task"
+      rm -f "$STATE/.secondmate-turn-hang-alerted-$task"
+      continue
+    fi
+    progress_snap=
+    if [ -f "$progress_file" ]; then
+      progress_snap=$(stat_mtime "$progress_file" 2>/dev/null || true)
+    fi
+    case "$progress_snap" in ''|*[!0-9]*) progress_snap=0 ;; esac
+    obs="$STATE/.secondmate-turn-hang-$task"
+    anchor="$STATE/.secondmate-turn-hang-anchor-$task"
+    if [ ! -f "$obs" ]; then
+      # First sight past the bound opens the dual-zero confirmation window.
+      # Growth is judged from this anchor on later polls; this poll itself is
+      # confirmation 1 of SECONDMATE_TURN_HANG_CONFIRM.
+      printf '1\n' > "$obs" || return 1
+      : > "$anchor" || return 1
+      printf '%s\n' "$progress_snap" > "$STATE/.secondmate-turn-hang-progress-$task" || return 1
+      [ "$SECONDMATE_TURN_HANG_CONFIRM" -le 1 ] || continue
+      confirm_have=1
+    else
+      # Progress mtime advanced since observation opened -> real activity.
+      prev_progress=$(cat "$STATE/.secondmate-turn-hang-progress-$task" 2>/dev/null || true)
+      case "$prev_progress" in ''|*[!0-9]*) prev_progress=0 ;; esac
+      if [ "$progress_snap" -gt "$prev_progress" ]; then
+        secondmate_turn_hang_clear_observation "$task"
+        rm -f "$STATE/.secondmate-turn-hang-alerted-$task"
+        continue
+      fi
+      # Durable output growth since the observation anchor is positive evidence.
+      if secondmate_output_written_since "$task" "$STATE" "$anchor"; then
+        secondmate_turn_hang_clear_observation "$task"
+        rm -f "$STATE/.secondmate-turn-hang-alerted-$task"
+        continue
+      fi
+      confirm_have=$(( $(cat "$obs" 2>/dev/null || echo 0) + 1 ))
+      echo "$confirm_have" > "$obs" || return 1
+    fi
+    confirm_need=$SECONDMATE_TURN_HANG_CONFIRM
+    [ "$confirm_have" -ge "$confirm_need" ] || continue
+    # One surface per hang episode until the hang conditions clear.
+    if [ -f "$STATE/.secondmate-turn-hang-alerted-$task" ]; then
+      continue
+    fi
+    minutes=$(( age / 60 ))
+    reason="stale: $win (turn hang suspect: turn ${minutes}m with zero progress and zero output growth; consider interrupt+relaunch)"
+    queued=$(fm_wake_queued_keys stale)
+    if ! printf '%s\n' "$queued" | grep -Fx "$win" >/dev/null 2>&1; then
+      fm_wake_append stale "$win" "$reason" || return 1
+    fi
+    : > "$STATE/.secondmate-turn-hang-alerted-$task" || return 1
+    # Keep observation markers so a still-hung mate does not re-open a fresh
+    # confirmation ladder every poll; clearing happens only when hang ends.
     wake "$reason"
   done
   return 0
@@ -1963,6 +2118,14 @@ while :; do
   # the parent without consuming or rewriting the receiving home's record.
   secondmate_wake_stall_tick || {
     echo "watcher: secondmate wake-loop observation failed" >&2
+    exit 1
+  }
+
+  # A secondmate skips the ordinary pane-stale path while working, so a hung
+  # mid-turn mate never reaches busy_turn_over_age. Observe exact-busy mates
+  # past the turn-hang bound with dual zero-growth confirmation before one stale.
+  secondmate_turn_hang_tick || {
+    echo "watcher: secondmate turn-hang observation failed" >&2
     exit 1
   }
 
