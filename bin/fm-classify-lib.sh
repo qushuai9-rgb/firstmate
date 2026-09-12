@@ -1961,6 +1961,76 @@ crew_worktree_written_since() {  # <id> <state> <anchor-file>
   [ -n "$hit" ]
 }
 
+# 0 when some regular file under a secondmate's durable output roots is newer than
+# <anchor-file>. A kind=secondmate meta records a provisioned firstmate home, not a
+# code tree, so crew_worktree_written_since refuses it outright - that home's own
+# supervision churns state/ whether or not the mate produces anything. The output
+# probe instead looks only at the durable product surfaces a mate actually writes:
+# data/ and projects/ under its recorded home, plus an optional comma-separated
+# turn_hang_output= list of absolute roots in the same meta. state/, config/,
+# .no-mistakes/, and the ordinary generated-tree skip list stay out so watcher
+# bookkeeping cannot look like mate progress.
+#
+# 1 for every other outcome, including a non-secondmate id, a missing home, a
+# missing anchor, an empty or unreadable root list, and a walk that fails or finds
+# nothing. Absence of evidence always leaves the caller's hang schedule untouched.
+# Callers must reach this only when they are otherwise about to escalate a turn
+# hang, never on every poll; each root uses the same pruned, depth-bounded,
+# wall-clock-bounded walk as the ordinary worktree write probe.
+secondmate_output_written_since() {  # <id> <state> <anchor-file>
+  local id=$1 state=$2 anchor=$3 meta home kind extra root hit bound name
+  local -a names=() prune=() roots=()
+  [ -n "$id" ] || return 1
+  [ -f "$anchor" ] || return 1
+  meta="$state/$id.meta"
+  [ -f "$meta" ] || return 1
+  kind=$(grep '^kind=' "$meta" 2>/dev/null | tail -1 | cut -d= -f2- || true)
+  [ "$kind" = secondmate ] || return 1
+  home=$(grep '^home=' "$meta" 2>/dev/null | tail -1 | cut -d= -f2- || true)
+  [ -n "$home" ] && [ -d "$home" ] || return 1
+  [ -f "$home/.fm-secondmate-home" ] && [ ! -L "$home/.fm-secondmate-home" ] || return 1
+  [ "$(cat "$home/.fm-secondmate-home" 2>/dev/null || true)" = "$id" ] || return 1
+  [ -d "$home/data" ] && roots+=( "$home/data" )
+  [ -d "$home/projects" ] && roots+=( "$home/projects" )
+  extra=$(grep '^turn_hang_output=' "$meta" 2>/dev/null | tail -1 | cut -d= -f2- || true)
+  if [ -n "$extra" ]; then
+    IFS=',' read -r -a _fm_turn_hang_extra <<< "$extra"
+    for root in ${_fm_turn_hang_extra[@]+"${_fm_turn_hang_extra[@]}"}; do
+      # shellcheck disable=SC2001
+      root=$(printf '%s' "$root" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+      case "$root" in
+        /*) [ -d "$root" ] && roots+=( "$root" ) ;;
+      esac
+    done
+    unset _fm_turn_hang_extra
+  fi
+  [ "${#roots[@]}" -gt 0 ] || return 1
+  read -r -a names <<< "$FM_WORKTREE_WRITE_PRUNE"
+  for name in ${names[@]+"${names[@]}"}; do
+    [ "${#prune[@]}" -eq 0 ] || prune+=( -o )
+    prune+=( -name "$name" )
+  done
+  # Mate-home operational trees are never mate product, even when a home keeps
+  # them beside data/ or under an extra root the operator named.
+  for name in state config .no-mistakes; do
+    [ "${#prune[@]}" -eq 0 ] || prune+=( -o )
+    prune+=( -name "$name" )
+  done
+  bound=$FM_WORKTREE_WRITE_TIMEOUT
+  case "$bound" in ''|*[!0-9]*|0) bound=10 ;; esac
+  for root in "${roots[@]}"; do
+    if [ "${#prune[@]}" -gt 0 ]; then
+      hit=$(fm_run_timed "$bound" find "$root" -xdev -maxdepth "$FM_WORKTREE_WRITE_MAXDEPTH" \
+        \( "${prune[@]}" \) -prune -o -type f -newer "$anchor" -print -quit 2>/dev/null || true)
+    else
+      hit=$(fm_run_timed "$bound" find "$root" -xdev -maxdepth "$FM_WORKTREE_WRITE_MAXDEPTH" \
+        -type f -newer "$anchor" -print -quit 2>/dev/null || true)
+    fi
+    [ -n "$hit" ] && return 0
+  done
+  return 1
+}
+
 # 0 (benign/absorb) if EVERY task referenced by a no-verb "signal:" wake is provably
 # working; 1 (actionable/surface) if any is not, or no task can be resolved. Pass the
 # same space-separated file list the caller classified with the span read above.
