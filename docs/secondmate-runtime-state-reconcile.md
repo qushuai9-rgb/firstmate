@@ -259,3 +259,25 @@ only inside a resolved hunk.
    `turn_hang` or `idle_lapse` in `origin/main:bin/fm-watch.sh`; they document detectors
    that exist only on this branch. Since D4(a) is ruled still-open above, dropping these
    lines would delete the only documentation of the fix that closes it.
+
+### `bin/fm-watch.sh` + `docs/configuration.md` — conflict replaying commit `2e85fb5b`
+4. **`FM_SECONDMATE_TURN_HANG_SECS`: keep mine (the later semantic revision), not upstream's
+   earlier text.** This is the one place where "take the longer/newer upstream line" would
+   have been wrong: `2e85fb5b` deliberately rewrote the sentence my own `d535b2ec` had just
+   written, replacing a bare "no completed turn or newer native progress" with an explicit
+   busy-evidence definition (semantic verdict when the contract has one, else the
+   harness-scoped rendered busy footer, exact idle or dead always final) and adding that the
+   growth window is measured from that same age source. Discarding it would re-document the
+   pre-revision behavior.
+5. **Discarded side of ruling 4, and what it costs:** the rejected text carries no behavior
+   either, because both sides only describe `secondmate_turn_hang_tick`, which exists solely
+   on this branch (`turn_hang` → 0 hits in `origin/main:bin/fm-watch.sh`). So nothing
+   upstream depends on the discarded wording.
+6. **`bin/fm-watch.sh` header block: union, not choice.** The two sides were byte-identical
+   for the wake-loop-stall paragraph; the only real difference was that ours appends the
+   turn-hang-suspect entry. Resolution keeps the shared paragraph once and adds our entry,
+   so no duplicate doc line survives.
+7. **`FM_SECONDMATE_WAKE_STALL_SECS` again at this step: keep upstream's text.** Ruling 2
+   already decided this key; the replayed edit wanted to reopen it with wording that
+   describes my old `<task> <window>` reader. Upstream's implementation remains
+   `<window> <idle>`, so its comment stands until `9942584a` replays and rewrites the reader.

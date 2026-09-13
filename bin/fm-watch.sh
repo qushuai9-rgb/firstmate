@@ -120,6 +120,18 @@
 #                          rows do not feed this escalation, observation is
 #                          read-only, and one parent notification covers each
 #                          no-progress episode
+#   stale: <window> (turn hang suspect: turn <minutes>m with zero progress and
+#                          zero output growth; consider interrupt+relaunch)
+#                          a local secondmate stayed provably busy past its
+#                          turn_hang_secs / FM_SECONDMATE_TURN_HANG_SECS bound
+#                          (the semantic verdict when one exists, else the
+#                          harness-scoped rendered busy footer) while
+#                          state/<id>.progress and its durable output roots both
+#                          showed no growth over that same window across
+#                          consecutive confirming polls; a fresh write moves the
+#                          window forward and must then show its own silence;
+#                          ordinary crews already reach the busy-turn bound
+#                          through the pane-stale path that secondmates skip
 # For normal supervision, resume the session-start primary-harness protocol
 # after each printed reason. Direct duplicate invocations of this script still
 # no-op through the watcher singleton lock.
@@ -281,6 +293,25 @@ BUSY_TURN_MAX_SECS=${FM_BUSY_TURN_MAX_SECS:-3600}
 # secondmate_wake_stall_tick, never a substitute for it.
 SECONDMATE_WAKE_STALL_SECS=${FM_SECONDMATE_WAKE_STALL_SECS:-}
 case "$SECONDMATE_WAKE_STALL_SECS" in ''|*[!0-9]*|0) SECONDMATE_WAKE_STALL_SECS=180 ;; esac
+# A local secondmate skips the ordinary pane-stale path while working, so the
+# busy-turn age bound that catches a hung ordinary crew never runs for it. This
+# default (30 minutes) is the parent-side turn-in-progress hang bound for mates
+# only: past it, with no native progress marker growth AND no durable output
+# growth, the watcher surfaces one stale wake after consecutive confirming polls.
+# Per-task meta turn_hang_secs= overrides the home default for long backtests.
+SECONDMATE_TURN_HANG_SECS=${FM_SECONDMATE_TURN_HANG_SECS:-}
+case "$SECONDMATE_TURN_HANG_SECS" in ''|*[!0-9]*|0) SECONDMATE_TURN_HANG_SECS=1800 ;; esac
+# Consecutive zero-growth polls required before a secondmate turn hang surfaces.
+# One extra confirmation keeps a single slow-but-healthy poll from alarming.
+SECONDMATE_TURN_HANG_CONFIRM=${FM_SECONDMATE_TURN_HANG_CONFIRM:-}
+case "$SECONDMATE_TURN_HANG_CONFIRM" in ''|*[!0-9]*|0) SECONDMATE_TURN_HANG_CONFIRM=2 ;; esac
+# A self-continuing secondmate (meta self_continue=1) that ends a turn with a
+# terminal done line is expected to start its next experiment without waiting
+# for a wake. Past FM_SECONDMATE_IDLE_LAPSE_SECS with no new status line and no
+# product output, one stale wake surfaces for inspection only. Generic secondmate
+# idle stays healthy; this arms only on the explicit opt-in.
+SECONDMATE_IDLE_LAPSE_SECS=${FM_SECONDMATE_IDLE_LAPSE_SECS:-}
+case "$SECONDMATE_IDLE_LAPSE_SECS" in ''|*[!0-9]*|0) SECONDMATE_IDLE_LAPSE_SECS=7200 ;; esac
 # A crew that declared a pause is idling on a known external wait, so its stale
 # pane is absorbed rather than wedge-escalated.
 # A captain-held or paused crew whose agent has confidently exited uses the same
@@ -865,14 +896,20 @@ EOF
 secondmate_provider_error_tick() {
   local meta task kind remote_host win tail error_line marker key queued reason error_re provider_re
   # A bare 5xx number is ordinary agent output (row counts, commit hashes, test
-  # tallies), so a match needs provider context: an upstream phrase, a known HTTP
-  # failure phrase, or a provider word on the same line next to the code in either
-  # order. Hex-adjacent codes are excluded so lookalikes inside hashes stay quiet.
-  provider_re='(http(/[0-9.]+)?|status([_[:space:]]?code)?|error|upstream|api|fetch|request|response|returned|provider|network|gateway|service)'
+  # tallies), so a match needs FAILURE context next to the code: an upstream
+  # phrase, a known HTTP failure phrase, a failure word such as http/status/error/
+  # failed/forbidden, or a `returned <5xx>` clause end. Generic provider nouns
+  # that also appear in throughput or latency output (api, provider, request,
+  # response) are deliberately absent, and hex-adjacent codes stay quiet inside
+  # hashes.
+  provider_re='(http(/[0-9.]+)?|status([_[:space:]]?code)?|error([[:space:]]+code)?|err|exception|fail(ed|ing|s|ure)|fatal|upstream|gateway|denied|forbidden|timeout|timed[[:space:]]+out|refused|unavailable|unreachable|overloaded|abort(ed)?)'
   error_re='upstream[[:space:]]+access[[:space:]]+forbidden|upstream[_[:space:]]*(error|fail(ure)?)|bad[[:space:]]+gateway|gateway[[:space:]]+timeout|service[[:space:]]+unavailable|internal[[:space:]]+server[[:space:]]+error|overloaded'
-  error_re="$error_re|(^|[^A-Za-z0-9])$provider_re[^0-9]{0,24}[^0-9A-Fa-f]5[0-9][0-9]([^0-9A-Fa-f]|\$)"
+  error_re="$error_re|(^|[^A-Za-z0-9])$provider_re[^0-9-]{0,16}[^0-9A-Fa-f]5[0-9][0-9]([^0-9A-Fa-f]|\$)"
   error_re="$error_re|(^|[^A-Za-z0-9])server[^0-9]{0,3}[^0-9A-Fa-f]5[0-9][0-9]([^0-9A-Fa-f]|\$)"
   error_re="$error_re|(^|[^0-9A-Fa-f])5[0-9][0-9]([^0-9A-Fa-f]|\$)[^0-9]{0,3}$provider_re"
+  # `returned 502` is a failure only when the code closes the clause; the same
+  # shape in `returned 500 items` or `returned 502 requests` is ordinary output.
+  error_re="$error_re|(^|[^A-Za-z0-9])(returned|received|got)[^0-9]{0,12}[^0-9A-Fa-f]5[0-9][0-9]([^0-9A-Fa-f[:space:]]|\$)"
   error_re="$error_re|((rate[ -]?limit|quota|too[[:space:]]+many[[:space:]]+requests|concurren(cy|t)).*(limit|exceed|busy|request))"
   for meta in "$STATE"/*.meta; do
     [ -e "$meta" ] || continue
@@ -914,6 +951,32 @@ secondmate_provider_error_tick() {
     wake "$reason"
   done
   return 0
+}
+
+# Reachable busy verdict for a local secondmate turn-hang observation. The
+# shared semantic contract is consulted first and its verdict is final whenever
+# it is not unknown: an exact idle or dead outranks a stale rendered footer. A
+# secondmate has no semantic busy wiring by design (an idle mate pane is
+# healthy), so an unknown verdict falls back to the harness-scoped rendered busy
+# footer that the secondmate pending-reply delivery observation also trusts.
+# Only an exact busy from either source counts; unknown and idle stay out.
+secondmate_pane_busy() {  # <window> [tail40]
+  local w=$1 tail40=${2-} task meta verdict
+  task=$(window_to_task "$w" "$STATE")
+  meta="$STATE/$task.meta"
+  if [ -n "$task" ] && [ -f "$meta" ]; then
+    verdict=$(fm_busy_classify_meta "$meta" "$task" "$STATE" "$tail40")
+  else
+    verdict=$(fm_busy_classify "$(window_backend "$w")" "$w" "$(window_harness "$w")" \
+      "${task:-unknown}" "$STATE" "$tail40")
+  fi
+  case "${verdict%% *}" in
+    busy) return 0 ;;
+    idle|dead) return 1 ;;
+  esac
+  [ -n "$tail40" ] || tail40=$(fm_backend_capture "$(window_backend "$w")" "$w" 40 "$(window_label "$w")" 2>/dev/null) || return 1
+  printf '%s' "$tail40" | grep -v '^[[:space:]]*$' | tail -6 \
+    | fm_busy_lines_match "$(window_harness "$w")"
 }
 
 # Per-task turn hang bound for a secondmate: meta turn_hang_secs= wins when it is a
@@ -986,7 +1049,9 @@ secondmate_idle_lapse_tick() {
     last=$(last_status_line "$STATE/$task.status")
     verb=$(status_line_verb "$last")
     [ "$verb" = done ] || { rm -f "$STATE/.secondmate-idle-alerted-$task" "$anchor"; continue; }
-    if window_is_busy "$win" ""; then
+    # A reachable busy verdict means the mate is working the next turn already,
+    # whatever its last status line says; the turn-hang tick owns that form.
+    if secondmate_pane_busy "$win"; then
       rm -f "$STATE/.secondmate-idle-alerted-$task" "$anchor"
       continue
     fi
@@ -1020,11 +1085,14 @@ secondmate_idle_lapse_tick() {
 # that path while working, so a hung mid-turn mate never produced a turn-ended
 # marker and never entered the busy-turn bound. This tick closes that gap without
 # inventing a parallel escalation ladder:
-#   - only kind=secondmate local mates with an exact busy verdict
+#   - only kind=secondmate local mates with a reachable busy verdict (the
+#     semantic contract when it has one, else the harness-scoped rendered footer)
 #   - age from the same completed-turn / native-progress / spawn-record markers
 #     busy_turn_over_age already trusts, measured against the per-task hang bound
 #   - dual zero-growth: native progress mtime AND durable output roots both quiet
-#     since the observation anchor (secondmate_output_written_since)
+#     over that same age window (the anchor is seeded from the age source and
+#     moves forward only when growth is seen, so a fresh write defers the alarm
+#     until its own silence reaches the bound)
 #   - SECONDMATE_TURN_HANG_CONFIRM consecutive confirming polls before one stale wake
 #   - inspection-only wording; never an automatic interrupt or relaunch
 # A declared pause or captain-held transfer keeps the ordinary pause cadence and
@@ -1054,8 +1122,8 @@ secondmate_turn_hang_tick() {
       rm -f "$STATE/.secondmate-turn-hang-alerted-$task"
       continue
     fi
-    # Exact busy only. Idle/unknown/dead leave ordinary secondmate supervision alone.
-    if ! window_is_busy "$win" ""; then
+    # Reachable busy only. Idle/unknown/dead leave ordinary secondmate supervision alone.
+    if ! secondmate_pane_busy "$win"; then
       secondmate_turn_hang_clear_observation "$task"
       rm -f "$STATE/.secondmate-turn-hang-alerted-$task"
       continue
@@ -1082,12 +1150,23 @@ secondmate_turn_hang_tick() {
     case "$progress_snap" in ''|*[!0-9]*) progress_snap=0 ;; esac
     obs="$STATE/.secondmate-turn-hang-$task"
     anchor="$STATE/.secondmate-turn-hang-anchor-$task"
+    # The growth anchor starts where the age source does, so the zero-output
+    # half covers the same interval as the bound; a later write moves it forward
+    # and must then show its own silence at the bound before the alarm can fire.
+    [ -f "$anchor" ] || touch -r "$age_src" "$anchor" || return 1
+    if secondmate_output_written_since "$task" "$STATE" "$anchor"; then
+      touch "$anchor" || return 1
+      rm -f "$obs" "$STATE/.secondmate-turn-hang-alerted-$task" || return 1
+      continue
+    fi
+    if [ "$(age_of "$anchor")" -lt "$bound" ]; then
+      rm -f "$obs" "$STATE/.secondmate-turn-hang-alerted-$task" || return 1
+      continue
+    fi
     if [ ! -f "$obs" ]; then
-      # First sight past the bound opens the dual-zero confirmation window.
-      # Growth is judged from this anchor on later polls; this poll itself is
-      # confirmation 1 of SECONDMATE_TURN_HANG_CONFIRM.
+      # First sight past the bound opens the confirmation window; this poll
+      # itself is confirmation 1 of SECONDMATE_TURN_HANG_CONFIRM.
       printf '1\n' > "$obs" || return 1
-      : > "$anchor" || return 1
       printf '%s\n' "$progress_snap" > "$STATE/.secondmate-turn-hang-progress-$task" || return 1
       [ "$SECONDMATE_TURN_HANG_CONFIRM" -le 1 ] || continue
       confirm_have=1
@@ -1096,12 +1175,6 @@ secondmate_turn_hang_tick() {
       prev_progress=$(cat "$STATE/.secondmate-turn-hang-progress-$task" 2>/dev/null || true)
       case "$prev_progress" in ''|*[!0-9]*) prev_progress=0 ;; esac
       if [ "$progress_snap" -gt "$prev_progress" ]; then
-        secondmate_turn_hang_clear_observation "$task"
-        rm -f "$STATE/.secondmate-turn-hang-alerted-$task"
-        continue
-      fi
-      # Durable output growth since the observation anchor is positive evidence.
-      if secondmate_output_written_since "$task" "$STATE" "$anchor"; then
         secondmate_turn_hang_clear_observation "$task"
         rm -f "$STATE/.secondmate-turn-hang-alerted-$task"
         continue
@@ -2391,8 +2464,6 @@ while :; do
     exit 1
   }
 
-<<<<<<< HEAD
-=======
   # A local secondmate pane can expose a provider failure before the agent writes
   # its required blocked: or failed: status line. Scan the bounded tail before
   # slower supervision paths so a short-lived error still produces one check.
@@ -2418,7 +2489,6 @@ while :; do
     exit 1
   }
 
->>>>>>> 7f1540b1 (fix(watch): close secondmate monitoring gaps)
   # Process-to-event liveness repair. This never discovers a result by polling:
   # each registered source has its own child blocking on that source, and this
   # only republishes results already captured durably and restarts a source
