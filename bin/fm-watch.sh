@@ -105,7 +105,8 @@
 #   check: secondmate provider error: mate=<id> <summary>
 #                          a local secondmate pane tail contains a provider or
 #                          upstream failure; one wake is emitted per error
-#                          episode and the marker clears when the pane recovers
+#                          episode, the episode is keyed by the matched failure
+#                          context, and the marker clears when the pane recovers
 #   check: secondmate wake-loop stalled: mate=<id> row=<seq> idle=<seconds>s
 #                          an actionable row in an endpoint-recorded local
 #                          secondmate home's durable wake queue did not advance
@@ -880,25 +881,25 @@ EOF
 # Surface one provider-error check for a local secondmate pane. The pane tail is
 # bounded and is the only source used here: status logs remain owned by the
 # secondmate status contract, while this catches a provider failure that stops
-# the agent before it can append blocked: or failed:. A marker covers the whole
-# episode, and clearing it on a healthy capture permits a later episode to wake.
+# the agent before it can append blocked: or failed:. The episode marker is keyed
+# by the identity of the matched failure context, so a different failure in the
+# same pane opens a new episode instead of being masked by the earlier one, while
+# a repeated failure whose line churns stays one episode and a healthy capture
+# clears the marker.
 secondmate_provider_error_tick() {
-  local meta task kind remote_host win tail error_line marker key queued reason error_re provider_re
+  local meta task kind remote_host win tail error_line error_context error_key marker key queued reason code_end error_re
   # A bare 5xx number is ordinary agent output (row counts, commit hashes, test
-  # tallies), so a match needs FAILURE context next to the code: an upstream
-  # phrase, a known HTTP failure phrase, a failure word such as http/status/error/
-  # failed/forbidden, or a `returned <5xx>` clause end. Generic provider nouns
-  # that also appear in throughput or latency output (api, provider, request,
-  # response) are deliberately absent, and hex-adjacent codes stay quiet inside
-  # hashes.
-  provider_re='(http(/[0-9.]+)?|status([_[:space:]]?code)?|error([[:space:]]+code)?|err|exception|fail(ed|ing|s|ure)|fatal|upstream|gateway|denied|forbidden|timeout|timed[[:space:]]+out|refused|unavailable|unreachable|overloaded|abort(ed)?)'
-  error_re='upstream[[:space:]]+access[[:space:]]+forbidden|upstream[_[:space:]]*(error|fail(ure)?)|bad[[:space:]]+gateway|gateway[[:space:]]+timeout|service[[:space:]]+unavailable|internal[[:space:]]+server[[:space:]]+error|overloaded'
-  error_re="$error_re|(^|[^A-Za-z0-9])$provider_re[^0-9-]{0,16}[^0-9A-Fa-f]5[0-9][0-9]([^0-9A-Fa-f]|\$)"
-  error_re="$error_re|(^|[^A-Za-z0-9])server[^0-9]{0,3}[^0-9A-Fa-f]5[0-9][0-9]([^0-9A-Fa-f]|\$)"
-  error_re="$error_re|(^|[^0-9A-Fa-f])5[0-9][0-9]([^0-9A-Fa-f]|\$)[^0-9]{0,3}$provider_re"
+  # tallies), so a code only counts next to a failure word or phrase and only when
+  # the code closes its clause or names an HTTP reason phrase: `server 503 on port
+  # 8080`, `status 502 entries fetched`, `error budget 500 ns`, `error rate 500
+  # per million`, `timeout 500 ms`, `failed to parse 500 rows`, and `aborted 502
+  # stale sessions` all stay quiet. Hex-adjacent codes stay quiet inside hashes.
+  code_end='([[:space:]]+(Bad[[:space:]]+Gateway|Gateway[[:space:]]+Timeout|Service[[:space:]]+Unavailable|Internal[[:space:]]+Server[[:space:]]+Error|HTTP[[:space:]]+Version[[:space:]]+Not[[:space:]]+Supported|Network[[:space:]]+Authentication[[:space:]]+Required)|[[:space:]]*[^A-Za-z0-9[:space:]]|[[:space:]]*$)'
+  error_re='upstream[[:space:]]+access[[:space:]]+forbidden|upstream[[:space:]]+(error|fail(ure|ed|s)?|unavailable)|bad[[:space:]]+gateway|gateway[[:space:]]+timeout|service[[:space:]]+unavailable|internal[[:space:]]+server[[:space:]]+error|overloaded'
+  error_re="$error_re|(^|[^A-Za-z0-9])(http(/[0-9.]+)?|status([_[:space:]]?code)?|error([[:space:]]+code)?|err|exception|fail(ed|ing|s|ure)?|fatal|upstream|denied|forbidden|timeout|timed[[:space:]]+out|refused|unavailable|unreachable|overloaded|abort(ed)?)[^0-9A-Fa-f]{0,16}5[0-9][0-9]$code_end"
   # `returned 502` is a failure only when the code closes the clause; the same
   # shape in `returned 500 items` or `returned 502 requests` is ordinary output.
-  error_re="$error_re|(^|[^A-Za-z0-9])(returned|received|got)[^0-9]{0,12}[^0-9A-Fa-f]5[0-9][0-9]([^0-9A-Fa-f[:space:]]|\$)"
+  error_re="$error_re|(^|[^A-Za-z0-9])(returned|received|got)[^0-9A-Fa-f]{0,12}5[0-9][0-9]$code_end"
   error_re="$error_re|((rate[ -]?limit|quota|too[[:space:]]+many[[:space:]]+requests|concurren(cy|t)).*(limit|exceed|busy|request))"
   for meta in "$STATE"/*.meta; do
     [ -e "$meta" ] || continue
@@ -924,19 +925,27 @@ secondmate_provider_error_tick() {
       fi
       continue
     fi
-    if [ -e "$marker" ] || [ -L "$marker" ]; then
-      [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
-      continue
-    fi
     error_line=$(printf '%s\n' "$tail" | grep -Ei "$error_re" | tail -1 | tr '\t\r\n' ' ' | cut -c1-240)
     [ -n "$error_line" ] || error_line="provider or upstream error detected in pane tail"
+    # Episode identity is the matched failure context, not the whole line:
+    # a repeated error whose timestamp or request id churns stays one episode,
+    # while a different failure context re-alerts.
+    error_context=$(printf '%s\n' "$tail" | grep -Eio "$error_re" | tail -1 | tr '\t\r\n' ' ' | tr -s ' ' | cut -c1-240)
+    [ -n "$error_context" ] || error_context="$error_line"
+    error_key=$(printf '%s' "$error_context" | tr 'A-Z' 'a-z' | cksum | awk '{ print $1 ":" $2 }') || return 1
+    if [ -e "$marker" ] || [ -L "$marker" ]; then
+      [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
+      if [ "$(cat "$marker" 2>/dev/null || true)" = "$error_key" ]; then
+        continue
+      fi
+    fi
     key="secondmate-provider-error-$task"
     reason="check: secondmate provider error: mate=$task $error_line"
     queued=$(fm_wake_queued_keys check)
     if ! printf '%s\n' "$queued" | grep -Fx "$key" >/dev/null 2>&1; then
       fm_wake_append check "$key" "$reason" || return 1
     fi
-    : > "$marker" || return 1
+    printf '%s\n' "$error_key" > "$marker" || return 1
     wake "$reason"
   done
   return 0
