@@ -2,7 +2,8 @@
 # tests/fm-secondmate-lifecycle-e2e.test.sh - the happy-path secondmate operator
 # flow, end to end, against one shared world:
 #
-#   seed -> spawn -> routed send -> backlog handoff -> recovery respawn -> teardown
+#   seed -> spawn -> routed send -> backlog handoff -> recovery respawn ->
+#   charter-policy relaunch -> teardown
 #
 # Each phase asserts the durable contracts the consolidation audit lists, so the
 # many former positive unit tests (registry scope/charter/clone/mode, spawn meta,
@@ -21,6 +22,7 @@
 #   - a bare `fm-<id>` send targets the window recorded in THIS home's meta
 #   - backlog items move verbatim into the subhome and leave the main backlog
 #   - recovery respawns from the durable registry + persistent home
+#   - a control relaunch re-derives the continuation policy from the standing charter
 #   - teardown removes meta and the registry route only after removing the home
 set -u
 
@@ -223,6 +225,33 @@ phase_recovery() {
   pass "recovery: respawns from the durable registry and persistent home"
 }
 
+phase_relaunch_charter_policy() {
+  # An ordinary control relaunch re-derives the idle-lapse arming from the
+  # standing charter; it never carries a stale meta value. The charter is the
+  # owner, so both a disabled and an enabled standing policy must land in the
+  # replacement's record.
+  local meta="$HOME_DIR/state/design.meta" window
+  window=$(sed -n 's/^window=//p' "$meta")
+  [ -n "$window" ] || fail "relaunch fixture has no recorded window"
+  sed -i.bak 's/^Self-continuation: enabled$/Self-continuation: disabled/' "$SUB/data/charter.md"
+  rm -f "$SUB/data/charter.md.bak"
+  PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_DIR" FM_FAKE_TMUX_LOG="$LOG" FM_FAKE_TMUX_CAPTURE="$PANE" \
+    FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_COMMAND=zsh FM_FAKE_TMUX_CWD="$SUB_ABS" \
+    "$ROOT/bin/fm-spawn.sh" design --relaunch --harness codex >/dev/null \
+    || fail "secondmate relaunch after disabling the charter policy failed"
+  grep -qx 'self_continue=0' "$meta" \
+    || fail "relaunch did not re-derive self_continue=0 from the disabled charter"
+  sed -i.bak 's/^Self-continuation: disabled$/Self-continuation: enabled/' "$SUB/data/charter.md"
+  rm -f "$SUB/data/charter.md.bak"
+  PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_DIR" FM_FAKE_TMUX_LOG="$LOG" FM_FAKE_TMUX_CAPTURE="$PANE" \
+    FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_COMMAND=zsh FM_FAKE_TMUX_CWD="$SUB_ABS" \
+    "$ROOT/bin/fm-spawn.sh" design --relaunch --harness codex >/dev/null \
+    || fail "secondmate relaunch after re-enabling the charter policy failed"
+  grep -qx 'self_continue=1' "$meta" \
+    || fail "relaunch did not re-derive self_continue=1 from the enabled charter"
+  pass "relaunch: re-derives the continuation policy from the standing charter in both directions"
+}
+
 phase_teardown() {
   local teardown_out corr rec
   corr=$(FM_HOME="$HOME_DIR" bash -c '
@@ -261,4 +290,5 @@ phase_spawn
 phase_send
 phase_handoff
 phase_recovery
+phase_relaunch_charter_policy
 phase_teardown

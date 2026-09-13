@@ -3786,12 +3786,9 @@ preserve_relaunch_meta() {
   if [ "$KIND" = secondmate ]; then
     echo "home=$PROJ_ABS"
     echo "projects=$SECONDMATE_PROJECTS"
-    if [ "${RELAUNCH:-0}" -eq 1 ]; then
-      self_continue=$(fm_meta_get "$RELAUNCH_META" self_continue)
-    else
-      self_continue=${SECONDMATE_SELF_CONTINUE:-0}
-    fi
-    echo "self_continue=$self_continue"
+    # Re-derive the continuation policy from the standing charter on every
+    # spawn, relaunch included; reading it never rewrites the charter.
+    echo "self_continue=${SECONDMATE_SELF_CONTINUE:-0}"
   fi
   if [ "$RELAUNCH" -eq 1 ]; then
     preserve_relaunch_meta
