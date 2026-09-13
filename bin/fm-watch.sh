@@ -291,6 +291,13 @@ case "$SECONDMATE_TURN_HANG_SECS" in ''|*[!0-9]*|0) SECONDMATE_TURN_HANG_SECS=18
 # One extra confirmation keeps a single slow-but-healthy poll from alarming.
 SECONDMATE_TURN_HANG_CONFIRM=${FM_SECONDMATE_TURN_HANG_CONFIRM:-}
 case "$SECONDMATE_TURN_HANG_CONFIRM" in ''|*[!0-9]*|0) SECONDMATE_TURN_HANG_CONFIRM=2 ;; esac
+# A self-continuing secondmate (meta self_continue=1) that ends a turn with a
+# terminal done line is expected to start its next experiment without waiting
+# for a wake. Past FM_SECONDMATE_IDLE_LAPSE_SECS with no new status line and no
+# product output, one stale wake surfaces for inspection only. Generic secondmate
+# idle stays healthy; this arms only on the explicit opt-in.
+SECONDMATE_IDLE_LAPSE_SECS=${FM_SECONDMATE_IDLE_LAPSE_SECS:-}
+case "$SECONDMATE_IDLE_LAPSE_SECS" in ''|*[!0-9]*|0) SECONDMATE_IDLE_LAPSE_SECS=7200 ;; esac
 # A crew that declared a pause is idling on a known external wait, so its stale
 # pane is absorbed rather than wedge-escalated.
 # A captain-held or paused crew whose agent has confidently exited uses the same
@@ -881,6 +888,80 @@ secondmate_turn_hang_clear_observation() {  # <task>
   rm -f "$STATE/.secondmate-turn-hang-$task" \
     "$STATE/.secondmate-turn-hang-anchor-$task" \
     "$STATE/.secondmate-turn-hang-progress-$task"
+}
+
+# Idle-lapse bound for a self-continuing secondmate: meta idle_lapse_secs= wins
+# when it is a positive integer, otherwise FM_SECONDMATE_IDLE_LAPSE_SECS
+# (default 7200) applies.
+secondmate_idle_lapse_bound_secs() {  # <meta-file>
+  local raw
+  raw=$(fm_meta_get "$meta_file" idle_lapse_secs)
+  case "$raw" in
+    ''|*[!0-9]*|0) printf '%s\n' "$SECONDMATE_IDLE_LAPSE_SECS" ;;
+    *) printf '%s\n' "$raw" ;;
+  esac
+}
+
+# Parent-side idle-lapse detector for self-continuing secondmates. A mate whose
+# charter says "turn ends by starting the next experiment" can stop silently
+# right after a terminal done: line - the pane is not busy, so the turn-hang
+# tick skips it, and the ordinary pane-stale path skips secondmates by design,
+# leaving the "done but not continuing" form in a supervision gap (observed
+# live 2026-09-13). Generic idle is healthy, so this tick arms only on the
+# explicit meta self_continue=1 opt-in, and it fires only when ALL of:
+#   - the newest status line's verb is a terminal done
+#   - the mate is not busy (turn-hang tick owns the busy form)
+#   - the status file's age exceeds the idle-lapse bound
+#   - no durable output growth under the mate's product roots since that
+#     status line (writing a report counts as continuing)
+# One stale wake per lapse episode; the marker clears only when the mate works
+# or reports again, so a later genuine lapse alarms afresh.
+secondmate_idle_lapse_tick() {
+  local meta task kind remote_host home win bound age last verb anchor reason queued
+  for meta in "$STATE"/*.meta; do
+    [ -e "$meta" ] || continue
+    kind=$(fm_meta_get "$meta" kind)
+    [ "$kind" = secondmate ] || continue
+    [ "$(fm_meta_get "$meta" self_continue)" = 1 ] || continue
+    remote_host=$(fm_meta_get "$meta" remote_host)
+    [ -z "$remote_host" ] || continue
+    task=${meta##*/}
+    task=${task%.meta}
+    case "$task" in ''|*[!A-Za-z0-9._-]*) continue ;; esac
+    home=$(fm_meta_get "$meta" home)
+    [ -n "$home" ] || continue
+    [ -f "$home/.fm-secondmate-home" ] && [ ! -L "$home/.fm-secondmate-home" ] || continue
+    [ "$(cat "$home/.fm-secondmate-home" 2>/dev/null || true)" = "$task" ] || continue
+    win=$(fm_backend_target_of_meta "$meta")
+    [ -n "$win" ] || continue
+    last=$(last_status_line "$STATE/$task.status")
+    verb=${last%%:*}
+    verb=${verb%%\[*}
+    [ "$verb" = done ] || { rm -f "$STATE/.secondmate-idle-alerted-$task"; continue; }
+    if window_is_busy "$win" ""; then
+      rm -f "$STATE/.secondmate-idle-alerted-$task"
+      continue
+    fi
+    meta_file=$meta
+    bound=$(secondmate_idle_lapse_bound_secs)
+    age=$(age_of "$STATE/$task.status")
+    [ "$age" -ge "$bound" ] || { rm -f "$STATE/.secondmate-idle-alerted-$task"; continue; }
+    # Report writing or any product output since the done line means the
+    # mate is still working; that is continuation, not a lapse.
+    if secondmate_output_written_since "$task" "$STATE" "$STATE/$task.status"; then
+      rm -f "$STATE/.secondmate-idle-alerted-$task"
+      continue
+    fi
+    [ -f "$STATE/.secondmate-idle-alerted-$task" ] && continue
+    reason="stale: $win (idle lapse: done $(( age / 3600 ))h ago with self-continue charter but no next action; consider relaunch with charter reminder)"
+    queued=$(fm_wake_queued_keys stale)
+    if ! printf '%s\n' "$queued" | grep -Fx "$win" >/dev/null 2>&1; then
+      fm_wake_append stale "$win" "$reason" || return 1
+    fi
+    : > "$STATE/.secondmate-idle-alerted-$task" || return 1
+    wake "$reason"
+  done
+  return 0
 }
 
 # Parent-side turn-in-progress hang detector for local secondmates. Ordinary crews
@@ -2126,6 +2207,15 @@ while :; do
   # past the turn-hang bound with dual zero-growth confirmation before one stale.
   secondmate_turn_hang_tick || {
     echo "watcher: secondmate turn-hang observation failed" >&2
+    exit 1
+  }
+
+  # A self-continuing secondmate that stops right after a terminal done line
+  # is neither busy (turn-hang tick skips it) nor anomalous to the ordinary
+  # stale path (secondmates are skipped by design). Observe the explicit
+  # self_continue=1 opt-in for that done-but-not-continuing form.
+  secondmate_idle_lapse_tick || {
+    echo "watcher: secondmate idle-lapse observation failed" >&2
     exit 1
   }
 
