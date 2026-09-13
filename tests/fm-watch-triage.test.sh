@@ -3575,10 +3575,22 @@ test_secondmate_provider_error_episode_alerts_once_and_recovers() {
   out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
   [ -z "$out" ] || fail "healthy provider pane was not quiet: $out"
   [ ! -e "$state/.secondmate-provider-error-mate" ] || fail "provider error marker did not clear after recovery"
+  # A bare 5xx number in ordinary agent output is not a provider error.
+  printf 'processed 500 rows across 502 files (commit deadbeef502)\n' > "$capture"
+  out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
+  [ -z "$out" ] || fail "ordinary output with a 5xx-like number alerted: $out"
+  [ ! -e "$state/.secondmate-provider-error-mate" ] || fail "ordinary output set a provider error marker"
+  # A contextual HTTP failure still alerts and then clears normally.
+  printf 'HTTP/1.1 502 Bad Gateway\n' > "$capture"
+  out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
+  assert_contains "$out" 'check: secondmate provider error: mate=mate' "contextual HTTP 502 did not alert"
+  printf 'ready\n' > "$capture"
+  run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick >/dev/null
+  [ ! -e "$state/.secondmate-provider-error-mate" ] || fail "provider error marker did not clear before the rate-limit case"
   printf '429 rate limit exceeded\n' > "$capture"
   out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
   assert_contains "$out" 'check: secondmate provider error: mate=mate' "provider error did not alert after recovery"
-  pass "secondmate provider errors alert once per episode, stay quiet when healthy, and re-alert after recovery"
+  pass "secondmate provider errors alert once per episode, stay quiet when healthy, ignore bare 5xx numbers, and re-alert after recovery"
 }
 
 test_secondmate_idle_lapse_requires_self_continue_and_done() {
@@ -3599,6 +3611,33 @@ test_secondmate_idle_lapse_requires_self_continue_and_done() {
   out=$(FM_SECONDMATE_IDLE_LAPSE_SECS=1 run_watch_tick "$state" "$fakebin" "$capture" secondmate_idle_lapse_tick)
   [ -z "$out" ] || fail "idle lapse alerted without self_continue=1: $out"
   pass "idle lapse requires the self_continue=1 metadata opt-in and a terminal done status"
+}
+
+# A product write after the terminal done line is continuation for one window
+# only: the observation anchor moves forward when growth is seen, so an old
+# write cannot mask a later silence. The done line may carry the documented
+# correlation token, which must parse as the same terminal verb.
+test_secondmate_idle_lapse_stale_output_cannot_mask_later_silence() {
+  local dir state fakebin out capture window home now
+  dir=$(make_case secondmate-idle-lapse-window); state="$dir/state"; fakebin="$dir/fakebin"
+  capture="$dir/pane.txt"; window="test:fm-idle-window"; home="$dir/mate-home"
+  mkdir -p "$home/state" "$home/data" "$home/projects"
+  printf 'mate\n' > "$home/.fm-secondmate-home"
+  printf 'idle\n' > "$capture"
+  printf 'window=%s\nkind=secondmate\nharness=pi\nhome=%s\nself_continue=1\n' "$window" "$home" > "$state/mate.meta"
+  printf 'done [corr=0123456789abcdef]: exp-038 complete\n' > "$state/mate.status"
+  now=$(date +%s)
+  set_mtime "$(( now - 10 ))" "$state/mate.status"
+  # A write after the done line is continuation for the current window...
+  printf 'report\n' > "$home/data/report.md"
+  set_mtime "$(( now - 6 ))" "$home/data/report.md"
+  out=$(FM_SECONDMATE_IDLE_LAPSE_SECS=2 run_watch_tick "$state" "$fakebin" "$capture" secondmate_idle_lapse_tick)
+  [ -z "$out" ] || fail "recent output or the correlated done form did not suppress the lapse: $out"
+  # ...but once the write ages past the bound, the same silence must alarm.
+  set_mtime "$(( now - 6 ))" "$state/.secondmate-idle-anchor-mate"
+  out=$(FM_SECONDMATE_IDLE_LAPSE_SECS=2 run_watch_tick "$state" "$fakebin" "$capture" secondmate_idle_lapse_tick)
+  assert_contains "$out" 'idle lapse' "a stale write masked the later silence"
+  pass "idle lapse parses correlated done, counts a fresh write once, and alarms after the write ages"
 }
 
 # --- secondmate turn-in-progress hang detector -----------------------------
@@ -5362,6 +5401,7 @@ test_crew_worktree_written_since_classifier
 test_secondmate_output_written_since_classifier
 test_secondmate_provider_error_episode_alerts_once_and_recovers
 test_secondmate_idle_lapse_requires_self_continue_and_done
+test_secondmate_idle_lapse_stale_output_cannot_mask_later_silence
 test_empty_write_prune_widens_the_probe
 test_empty_write_prune_from_the_environment_widens_the_probe
 test_worktree_write_probe_is_wall_clock_bounded

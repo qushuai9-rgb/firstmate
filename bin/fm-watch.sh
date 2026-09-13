@@ -863,7 +863,11 @@ EOF
 # the agent before it can append blocked: or failed:. A marker covers the whole
 # episode, and clearing it on a healthy capture permits a later episode to wake.
 secondmate_provider_error_tick() {
-  local meta task kind remote_host win tail error_line marker key queued reason
+  local meta task kind remote_host win tail error_line marker key queued reason error_re
+  # A bare 5xx number is ordinary agent output (row counts, commit hashes, test
+  # tallies), so a match needs provider context: an upstream phrase, a known HTTP
+  # failure phrase, or an HTTP/status/error token adjacent to the code.
+  error_re='upstream[[:space:]]+access[[:space:]]+forbidden|upstream[_[:space:]]*(error|fail(ure)?)|bad[[:space:]]+gateway|gateway[[:space:]]+timeout|service[[:space:]]+unavailable|internal[[:space:]]+server[[:space:]]+error|overloaded|(http(/[0-9.]+)?|status([_[:space:]]?code)?|error)[[:space:]:=]*5[0-9][0-9]|5[0-9][0-9][[:space:]]+(upstream|internal|server|bad|gateway|service|overloaded|error|forbidden)|((rate[ -]?limit|quota|too[[:space:]]+many[[:space:]]+requests|concurren(cy|t)).*(limit|exceed|busy|request))'
   for meta in "$STATE"/*.meta; do
     [ -e "$meta" ] || continue
     kind=$(fm_meta_get "$meta" kind)
@@ -881,7 +885,7 @@ secondmate_provider_error_tick() {
       continue
     }
     marker="$STATE/.secondmate-provider-error-$task"
-    if ! printf '%s\n' "$tail" | grep -Eiq '(^|[^0-9])5[0-9][0-9]([^0-9]|$)|upstream[[:space:]]+access[[:space:]]+forbidden|upstream_error|((rate[ -]?limit|quota|too[[:space:]]+many[[:space:]]+requests|concurren(cy|t)).*(limit|exceed|busy|request))'; then
+    if ! printf '%s\n' "$tail" | grep -Eiq "$error_re"; then
       if [ -e "$marker" ] || [ -L "$marker" ]; then
         [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
         rm -f "$marker" || return 1
@@ -892,7 +896,7 @@ secondmate_provider_error_tick() {
       [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
       continue
     fi
-    error_line=$(printf '%s\n' "$tail" | grep -Ei '(^|[^0-9])5[0-9][0-9]([^0-9]|$)|upstream[[:space:]]+access[[:space:]]+forbidden|upstream_error|((rate[ -]?limit|quota|too[[:space:]]+many[[:space:]]+requests|concurren(cy|t)).*(limit|exceed|busy|request))' | tail -1 | tr '\t\r\n' ' ' | cut -c1-240)
+    error_line=$(printf '%s\n' "$tail" | grep -Ei "$error_re" | tail -1 | tr '\t\r\n' ' ' | cut -c1-240)
     [ -n "$error_line" ] || error_line="provider or upstream error detected in pane tail"
     key="secondmate-provider-error-$task"
     reason="check: secondmate provider error: mate=$task $error_line"
@@ -949,8 +953,9 @@ secondmate_idle_lapse_bound_secs() {  # <meta-file>
 #   - the newest status line's verb is a terminal done
 #   - the mate is not busy (turn-hang tick owns the busy form)
 #   - the status file's age exceeds the idle-lapse bound
-#   - no durable output growth under the mate's product roots since that
-#     status line (writing a report counts as continuing)
+#   - no durable output growth under the mate's product roots since the
+#     observation anchor (writing a report counts as continuing, but the
+#     refreshed anchor means one write can only suppress one window)
 # One stale wake per lapse episode; the marker clears only when the mate works
 # or reports again, so a later genuine lapse alarms afresh.
 secondmate_idle_lapse_tick() {
@@ -971,23 +976,27 @@ secondmate_idle_lapse_tick() {
     [ "$(cat "$home/.fm-secondmate-home" 2>/dev/null || true)" = "$task" ] || continue
     win=$(fm_backend_target_of_meta "$meta")
     [ -n "$win" ] || continue
+    anchor="$STATE/.secondmate-idle-anchor-$task"
     last=$(last_status_line "$STATE/$task.status")
-    verb=${last%%:*}
-    verb=${verb%%\[*}
-    [ "$verb" = done ] || { rm -f "$STATE/.secondmate-idle-alerted-$task"; continue; }
+    verb=$(status_line_verb "$last")
+    [ "$verb" = done ] || { rm -f "$STATE/.secondmate-idle-alerted-$task" "$anchor"; continue; }
     if window_is_busy "$win" ""; then
-      rm -f "$STATE/.secondmate-idle-alerted-$task"
+      rm -f "$STATE/.secondmate-idle-alerted-$task" "$anchor"
       continue
     fi
     bound=$(secondmate_idle_lapse_bound_secs "$meta")
     age=$(age_of "$STATE/$task.status")
-    [ "$age" -ge "$bound" ] || { rm -f "$STATE/.secondmate-idle-alerted-$task"; continue; }
-    # Report writing or any product output since the done line means the
-    # mate is still working; that is continuation, not a lapse.
-    if secondmate_output_written_since "$task" "$STATE" "$STATE/$task.status"; then
+    [ "$age" -ge "$bound" ] || { rm -f "$STATE/.secondmate-idle-alerted-$task" "$anchor"; continue; }
+    # Seed the observation window from the done line so the first alarm still
+    # fires on the normal bound, then move it forward only when a NEW product
+    # write appears. An earlier write can therefore not mask a later silence.
+    [ -f "$anchor" ] || touch -r "$STATE/$task.status" "$anchor" || return 1
+    if secondmate_output_written_since "$task" "$STATE" "$anchor"; then
+      touch "$anchor" || return 1
       rm -f "$STATE/.secondmate-idle-alerted-$task"
       continue
     fi
+    [ "$(age_of "$anchor")" -ge "$bound" ] || { rm -f "$STATE/.secondmate-idle-alerted-$task"; continue; }
     [ -f "$STATE/.secondmate-idle-alerted-$task" ] && continue
     reason="stale: $win (idle lapse: done $(( age / 3600 ))h ago with self-continue charter but no next action; consider relaunch with charter reminder)"
     queued=$(fm_wake_queued_keys stale)

@@ -56,6 +56,8 @@ EOF
   display-message)
     case "$*" in
       *'#{cursor_y}'*) printf '0\n' ;;
+      *'pane_current_command'*) printf '%s\n' "${FM_FAKE_TMUX_COMMAND:-firstmate}" ;;
+      *'pane_current_path'*) printf '%s\n' "${FM_FAKE_TMUX_CWD:-firstmate}" ;;
       *) printf 'firstmate\n' ;;
     esac
     exit 0
