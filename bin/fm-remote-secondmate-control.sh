@@ -128,16 +128,18 @@ state_value() { # <id>; prints recovery-grade state
 }
 
 print_route() { # <id>
-  local id=$1 harness traceparent
+  local id=$1 harness traceparent self_continue
   remote_endpoint_require "$id"
   harness=$(fm_meta_get "$REMOTE_ENDPOINT_META" harness)
   traceparent=$(fm_meta_get "$REMOTE_ENDPOINT_META" traceparent)
+  self_continue=$(fm_meta_get "$REMOTE_ENDPOINT_META" self_continue)
   printf 'schema=fm-remote-secondmate-control.v1\n'
   printf 'backend=%s\n' "$REMOTE_ENDPOINT_BACKEND"
   printf 'target=%s\n' "$REMOTE_ENDPOINT_TARGET"
   printf 'herdr_session=%s\n' "$REMOTE_HERDR_SESSION"
   printf 'harness=%s\n' "$harness"
   [ -z "$traceparent" ] || printf 'traceparent=%s\n' "$traceparent"
+  [ -z "$self_continue" ] || printf 'self_continue=%s\n' "$self_continue"
 }
 
 cmd_route() {

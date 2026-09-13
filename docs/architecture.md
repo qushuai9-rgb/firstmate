@@ -34,6 +34,7 @@ Once that no-progress interval reaches `FM_SECONDMATE_WAKE_STALL_SECS` and the m
 Endpointless registered mates remain outside this scan because startup secondmate-liveness owns dead or missing endpoint recovery, and remote homes retain their host-local supervision boundary.
 `tests/fm-wake-queue.test.sh` pins the no-progress notification, drain-progress reset, declared-pause exclusion, active-turn deferral, idempotence, quiet-queue, and byte-for-byte foreign-row preservation guarantees.
 `tests/fm-watch-triage.test.sh` pins the secondmate turn-hang tick: zero-progress and zero-output past the bound escalates, output growth or native progress suppresses it, and a short turn never alarms.
+The same watcher scans each local secondmate's bounded pane tail for provider and upstream errors, emits one keyed `check:` wake per error episode, clears the episode marker after recovery, and allows a later error to alert again.
 When a canonical validated PR poll returns exactly `merged`, the watcher routes it through the shared merge-outcome emitter before retiring the poll.
 [`bin/fm-merge-outcome-lib.sh`](../bin/fm-merge-outcome-lib.sh)'s header owns role routing, PR-specific wake identity, marker-locked normal deduplication, and the at-least-once ordering that prefers a rare duplicate over silence.
 After successful outcome publication, the watcher immediately delivers the emitter's local actionable poll row and publishes a private retirement receipt bound to the poll's registration, bytes, file identities, metadata, provider, URL, and task ID.

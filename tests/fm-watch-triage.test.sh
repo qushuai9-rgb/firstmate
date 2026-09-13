@@ -3245,6 +3245,64 @@ test_busy_pane_native_progress_resets_age() {
   pass "native progress resets busy age without a completed turn or notification"
 }
 
+# --- secondmate provider-error and idle-lapse detectors --------------------
+# Provider failures can stop a mate before it writes a status event, while a
+# self-continuing mate can stop after done without entering the ordinary stale path.
+# These fixtures use only synthetic metadata, status, and pane captures.
+
+run_watch_tick() {  # <state> <fakebin> <capture> <function>
+  local state=$1 fakebin=$2 capture=$3 function=$4
+  PATH="$fakebin:$PATH" FM_HOME="$(dirname "$state")" FM_STATE_OVERRIDE="$state" \
+    FM_FAKE_TMUX_WINDOW="$(sed -n 's/^window=//p' "$state/mate.meta")" \
+    FM_FAKE_TMUX_CAPTURE="$capture" bash -c '. "$1"; wake() { printf "%s\\n" "$1"; }; "$2"' _ \
+    "$ROOT/bin/fm-watch.sh" "$function"
+}
+
+test_secondmate_provider_error_episode_alerts_once_and_recovers() {
+  local dir state fakebin out capture window home
+  dir=$(make_case secondmate-provider-error); state="$dir/state"; fakebin="$dir/fakebin"
+  capture="$dir/pane.txt"; window="test:fm-provider"; home="$dir/mate-home"
+  mkdir -p "$home/state" "$home/data" "$home/projects"
+  printf 'mate\n' > "$home/.fm-secondmate-home"
+  printf '502 Upstream access forbidden\n' > "$capture"
+  printf 'window=%s\nkind=secondmate\nharness=pi\nhome=%s\n' "$window" "$home" > "$state/mate.meta"
+  out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
+  assert_contains "$out" 'check: secondmate provider error: mate=mate' "provider error wake missing"
+  [ "$(printf '%s\n' "$out" | grep -c 'check: secondmate provider error:')" -eq 1 ] \
+    || fail "provider error episode produced duplicate wake: $out"
+  [ -f "$state/.secondmate-provider-error-mate" ] || fail "provider error episode marker missing"
+  out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
+  [ -z "$out" ] || fail "same provider error episode re-alerted: $out"
+  printf 'ready\n' > "$capture"
+  out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
+  [ -z "$out" ] || fail "healthy provider pane was not quiet: $out"
+  [ ! -e "$state/.secondmate-provider-error-mate" ] || fail "provider error marker did not clear after recovery"
+  printf '429 rate limit exceeded\n' > "$capture"
+  out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
+  assert_contains "$out" 'check: secondmate provider error: mate=mate' "provider error did not alert after recovery"
+  pass "secondmate provider errors alert once per episode, stay quiet when healthy, and re-alert after recovery"
+}
+
+test_secondmate_idle_lapse_requires_self_continue_and_done() {
+  local dir state fakebin out capture window home
+  dir=$(make_case secondmate-idle-lapse); state="$dir/state"; fakebin="$dir/fakebin"
+  capture="$dir/pane.txt"; window="test:fm-idle"; home="$dir/mate-home"
+  mkdir -p "$home/state" "$home/data" "$home/projects"
+  printf 'mate\n' > "$home/.fm-secondmate-home"
+  printf 'idle\n' > "$capture"
+  printf 'window=%s\nkind=secondmate\nharness=pi\nhome=%s\nself_continue=1\n' "$window" "$home" > "$state/mate.meta"
+  printf 'done: exp-038 complete\n' > "$state/mate.status"
+  set_mtime "$(( $(date +%s) - 10 ))" "$state/mate.status"
+  out=$(FM_SECONDMATE_IDLE_LAPSE_SECS=1 run_watch_tick "$state" "$fakebin" "$capture" secondmate_idle_lapse_tick)
+  assert_contains "$out" 'idle lapse' "self-continuing done lapse did not alert"
+  grep -v '^self_continue=1$' "$state/mate.meta" > "$state/mate.meta.tmp"
+  mv "$state/mate.meta.tmp" "$state/mate.meta"
+  rm -f "$state/.secondmate-idle-alerted-mate"
+  out=$(FM_SECONDMATE_IDLE_LAPSE_SECS=1 run_watch_tick "$state" "$fakebin" "$capture" secondmate_idle_lapse_tick)
+  [ -z "$out" ] || fail "idle lapse alerted without self_continue=1: $out"
+  pass "idle lapse requires the self_continue=1 metadata opt-in and a terminal done status"
+}
+
 # --- secondmate turn-in-progress hang detector -----------------------------
 # A working secondmate skips the ordinary pane-stale path, so BUSY_TURN_MAX_SECS
 # never reaches it. secondmate_turn_hang_tick closes that gap with dual zero-growth
@@ -4998,6 +5056,8 @@ test_status_is_paused_classifier
 test_crew_absorb_class_classifier
 test_crew_worktree_written_since_classifier
 test_secondmate_output_written_since_classifier
+test_secondmate_provider_error_episode_alerts_once_and_recovers
+test_secondmate_idle_lapse_requires_self_continue_and_done
 test_empty_write_prune_widens_the_probe
 test_empty_write_prune_from_the_environment_widens_the_probe
 test_worktree_write_probe_is_wall_clock_bounded

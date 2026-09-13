@@ -824,6 +824,8 @@ spawn_remote_secondmate() {
   remote_backend=$(printf '%s\n' "$out" | sed -n 's/^backend=//p' | tail -1)
   remote_target=$(printf '%s\n' "$out" | sed -n 's/^target=//p' | tail -1)
   remote_harness=$(printf '%s\n' "$out" | sed -n 's/^harness=//p' | tail -1)
+  remote_self_continue=$(printf '%s\n' "$out" | sed -n 's/^self_continue=//p' | tail -1)
+  case "$remote_self_continue" in 0|1) ;; *) remote_self_continue=0 ;; esac
   remote_herdr_session=$(printf '%s\n' "$out" | sed -n 's/^herdr_session=//p' | tail -1)
   if [ "$remote_backend" != herdr ]; then
     fm_lock_release "$remote_lock" || true
@@ -869,6 +871,7 @@ spawn_remote_secondmate() {
     echo "effort=${effort#-}"
     echo "home=$home"
     echo "projects=$(secondmate_registry_field "$DATA/secondmates.md" "$id" projects)"
+    echo "self_continue=$remote_self_continue"
     echo "remote_host=$host"
     echo "remote_root=$root"
     echo "remote_backend=$remote_backend"
@@ -2252,6 +2255,7 @@ if [ "$KIND" = secondmate ]; then
   else
     BRIEF="$DATA/$ID/brief.md"
   fi
+  SECONDMATE_SELF_CONTINUE=$(grep '^Self-continuation: enabled$' "$BRIEF" >/dev/null 2>&1 && printf 1 || printf 0)
 else
   PROJ_ABS="$(cd "$(resolve_project_dir_arg "$PROJ")" && pwd)"
   WT=""
@@ -3735,7 +3739,7 @@ SPAWN_META_PATH=$SPAWN_META_TMP
 preserve_relaunch_meta() {
   awk -F= '
     BEGIN {
-      split("window endpoint_task_id worktree project harness kind mode yolo tasktmp model effort busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
+      split("window endpoint_task_id worktree project harness kind mode yolo tasktmp model effort busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects self_continue control_relaunch_tx", keys, " ")
       for (i in keys) owned[keys[i]] = 1
     }
     !($1 in owned)
@@ -3782,6 +3786,12 @@ preserve_relaunch_meta() {
   if [ "$KIND" = secondmate ]; then
     echo "home=$PROJ_ABS"
     echo "projects=$SECONDMATE_PROJECTS"
+    if [ "${RELAUNCH:-0}" -eq 1 ]; then
+      self_continue=$(fm_meta_get "$RELAUNCH_META" self_continue)
+    else
+      self_continue=${SECONDMATE_SELF_CONTINUE:-0}
+    fi
+    echo "self_continue=$self_continue"
   fi
   if [ "$RELAUNCH" -eq 1 ]; then
     preserve_relaunch_meta

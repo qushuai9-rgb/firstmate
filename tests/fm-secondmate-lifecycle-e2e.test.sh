@@ -63,8 +63,9 @@ EOF
 
   # A filled charter brief whose routing scope differs from the charter summary,
   # so the registry must read the scope from the brief, not invent a generic one.
-  FM_SECONDMATE_SCOPE='customer onboarding from brief' \
-    scaffold_secondmate_charter "$HOME_DIR" design 'customer onboarding charter' alpha beta gamma \
+  export FM_SECONDMATE_SCOPE='customer onboarding from brief'
+  export FM_SECONDMATE_SELF_CONTINUE=enabled
+  scaffold_secondmate_charter "$HOME_DIR" design 'customer onboarding charter' alpha beta gamma \
     || fail "filled secondmate charter scaffold failed"
 }
 
@@ -121,6 +122,8 @@ phase_spawn() {
   assert_grep 'kind=secondmate' "$meta" "spawn meta did not record kind=secondmate"
   assert_grep "home=$SUB_ABS" "$meta" "spawn meta did not record the subhome"
   assert_grep 'projects=alpha, beta, gamma' "$meta" "spawn meta did not record the project list"
+  grep -qx 'self_continue=1' "$meta" \
+    || fail "spawn meta did not record the charter's self-continuation policy (charter=$(grep -F 'Self-continuation:' "$SUB/data/charter.md" || true))"
   # Launch ran in the subhome, with the persistent charter and cleared overrides,
   # and never ran a project-style treehouse get.
   assert_grep "FM_HOME='$SUB_ABS'" "$LOG" "secondmate launch did not set FM_HOME to the subhome"

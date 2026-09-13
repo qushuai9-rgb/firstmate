@@ -102,6 +102,10 @@
 #   check: inactive-outcome bounded poll-loop reconciliation found a suspicious
 #                          inactive terminal outcome that still lacks its durable
 #                          upstream receipt
+#   check: secondmate provider error: mate=<id> <summary>
+#                          a local secondmate pane tail contains a provider or
+#                          upstream failure; one wake is emitted per error
+#                          episode and the marker clears when the pane recovers
 #   check: secondmate wake-loop stalled: mate=<id> row=<seq> idle=<seconds>s
 #                          an actionable row in an endpoint-recorded local
 #                          secondmate home's durable wake queue did not advance
@@ -869,6 +873,55 @@ EOF
   return 0
 }
 
+# Surface one provider-error check for a local secondmate pane. The pane tail is
+# bounded and is the only source used here: status logs remain owned by the
+# secondmate status contract, while this catches a provider failure that stops
+# the agent before it can append blocked: or failed:. A marker covers the whole
+# episode, and clearing it on a healthy capture permits a later episode to wake.
+secondmate_provider_error_tick() {
+  local meta task kind remote_host win tail error_line marker key queued reason
+  for meta in "$STATE"/*.meta; do
+    [ -e "$meta" ] || continue
+    kind=$(fm_meta_get "$meta" kind)
+    [ "$kind" = secondmate ] || continue
+    remote_host=$(fm_meta_get "$meta" remote_host)
+    [ -z "$remote_host" ] || continue
+    task=${meta##*/}
+    task=${task%.meta}
+    case "$task" in ''|*[!A-Za-z0-9._-]*) continue ;; esac
+    win=$(fm_backend_target_of_meta "$meta")
+    [ -n "$win" ] || continue
+    tail=$(fm_backend_capture "$(window_backend "$win")" "$win" 80 "$(window_label "$win")" 2>/dev/null) || {
+      # An unreadable pane is not evidence that a provider episode ended.
+      # Preserve the marker and let the next successful capture classify it.
+      continue
+    }
+    marker="$STATE/.secondmate-provider-error-$task"
+    if ! printf '%s\n' "$tail" | grep -Eiq '(^|[^0-9])5[0-9][0-9]([^0-9]|$)|upstream[[:space:]]+access[[:space:]]+forbidden|upstream_error|((rate[ -]?limit|quota|too[[:space:]]+many[[:space:]]+requests|concurren(cy|t)).*(limit|exceed|busy|request))'; then
+      if [ -e "$marker" ] || [ -L "$marker" ]; then
+        [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
+        rm -f "$marker" || return 1
+      fi
+      continue
+    fi
+    if [ -e "$marker" ] || [ -L "$marker" ]; then
+      [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
+      continue
+    fi
+    error_line=$(printf '%s\n' "$tail" | grep -Ei '(^|[^0-9])5[0-9][0-9]([^0-9]|$)|upstream[[:space:]]+access[[:space:]]+forbidden|upstream_error|((rate[ -]?limit|quota|too[[:space:]]+many[[:space:]]+requests|concurren(cy|t)).*(limit|exceed|busy|request))' | tail -1 | tr '\t\r\n' ' ' | cut -c1-240)
+    [ -n "$error_line" ] || error_line="provider or upstream error detected in pane tail"
+    key="secondmate-provider-error-$task"
+    reason="check: secondmate provider error: mate=$task $error_line"
+    queued=$(fm_wake_queued_keys check)
+    if ! printf '%s\n' "$queued" | grep -Fx "$key" >/dev/null 2>&1; then
+      fm_wake_append check "$key" "$reason" || return 1
+    fi
+    : > "$marker" || return 1
+    wake "$reason"
+  done
+  return 0
+}
+
 # Per-task turn hang bound for a secondmate: meta turn_hang_secs= wins when it is a
 # positive integer, otherwise the home default SECONDMATE_TURN_HANG_SECS applies.
 secondmate_turn_hang_bound_secs() {  # <meta-file>
@@ -894,7 +947,7 @@ secondmate_turn_hang_clear_observation() {  # <task>
 # when it is a positive integer, otherwise FM_SECONDMATE_IDLE_LAPSE_SECS
 # (default 7200) applies.
 secondmate_idle_lapse_bound_secs() {  # <meta-file>
-  local raw
+  local meta_file=$1 raw
   raw=$(fm_meta_get "$meta_file" idle_lapse_secs)
   case "$raw" in
     ''|*[!0-9]*|0) printf '%s\n' "$SECONDMATE_IDLE_LAPSE_SECS" ;;
@@ -942,8 +995,7 @@ secondmate_idle_lapse_tick() {
       rm -f "$STATE/.secondmate-idle-alerted-$task"
       continue
     fi
-    meta_file=$meta
-    bound=$(secondmate_idle_lapse_bound_secs)
+    bound=$(secondmate_idle_lapse_bound_secs "$meta")
     age=$(age_of "$STATE/$task.status")
     [ "$age" -ge "$bound" ] || { rm -f "$STATE/.secondmate-idle-alerted-$task"; continue; }
     # Report writing or any product output since the done line means the
@@ -2199,6 +2251,14 @@ while :; do
   # the parent without consuming or rewriting the receiving home's record.
   secondmate_wake_stall_tick || {
     echo "watcher: secondmate wake-loop observation failed" >&2
+    exit 1
+  }
+
+  # A local secondmate pane can expose a provider failure before the agent writes
+  # its required blocked: or failed: status line. Scan the bounded tail before
+  # slower supervision paths so a short-lived error still produces one check.
+  secondmate_provider_error_tick || {
+    echo "watcher: secondmate provider-error observation failed" >&2
     exit 1
   }
 
