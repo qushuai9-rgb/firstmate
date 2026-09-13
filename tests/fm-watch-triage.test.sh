@@ -3642,7 +3642,7 @@ test_secondmate_provider_error_episode_alerts_once_and_recovers() {
   done
   # Generic provider nouns near a 5xx are ordinary throughput or latency output,
   # not a failure; each must stay quiet and leave no episode marker behind.
-  for line in 'the server processed 500 rows' 'processed 502 requests' 'the api returned 500 items' 'response time 500ms' 'provider processed 500 rows'; do
+  for line in 'the server processed 500 rows' 'processed 502 requests' 'the api returned 500 items' 'response time 500ms' 'provider processed 500 rows' 'starting server 503 on port 8080' 'connected to server 502' 'error budget 500 ns' 'error rate 500 per million' 'timeout 500 ms' 'connection refused after 500 ms' 'failed to parse 500 rows' 'status 502 entries fetched' 'aborted 502 stale sessions in cleanup' 'processed 503 errors out of 1000'; do
     printf '%s\n' "$line" > "$capture"
     out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
     [ -z "$out" ] || fail "ordinary output alerted on a 5xx-like number: $line -> $out"
@@ -3652,6 +3652,36 @@ test_secondmate_provider_error_episode_alerts_once_and_recovers() {
   out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
   assert_contains "$out" 'check: secondmate provider error: mate=mate' "provider error did not alert after recovery"
   pass "secondmate provider errors alert once per episode, stay quiet when healthy, ignore bare 5xx numbers, and re-alert after recovery"
+}
+
+# The episode marker is keyed to the matched line, so a pane that moves from one
+# provider failure to a different one re-alerts instead of the first marker
+# silencing the whole tail; repeating the same line stays quiet.
+test_secondmate_provider_error_line_change_reopens_episode() {
+  local dir state fakebin out capture window home
+  dir=$(make_case secondmate-provider-error-line); state="$dir/state"; fakebin="$dir/fakebin"
+  capture="$dir/pane.txt"; window="test:fm-provider-line"; home="$dir/mate-home"
+  mkdir -p "$home/state" "$home/data" "$home/projects"
+  printf 'mate\n' > "$home/.fm-secondmate-home"
+  printf 'window=%s\nkind=secondmate\nharness=pi\nhome=%s\n' "$window" "$home" > "$state/mate.meta"
+  printf '502 Upstream access forbidden\n' > "$capture"
+  out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
+  assert_contains "$out" 'check: secondmate provider error: mate=mate' "first provider error did not alert"
+  out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
+  [ -z "$out" ] || fail "the same provider error line re-alerted: $out"
+  # A repeated failure whose timestamp prefix churns is still the same episode.
+  printf '2026-09-13 20:31:22 502 Upstream access forbidden\n' > "$capture"
+  out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
+  [ -z "$out" ] || fail "a churning timestamp on the same provider error re-alerted: $out"
+  printf '504 Gateway Timeout\n' > "$capture"
+  out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
+  assert_contains "$out" 'check: secondmate provider error: mate=mate' "a different provider error line was masked by the first episode"
+  assert_contains "$out" '504 Gateway Timeout' "the new episode wake did not name the new error line"
+  printf 'ready\n' > "$capture"
+  out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
+  [ -z "$out" ] || fail "healthy pane was not quiet after line change: $out"
+  [ ! -e "$state/.secondmate-provider-error-mate" ] || fail "provider error marker did not clear after recovery"
+  pass "a changed provider failure opens a new episode while repeated or churn-prefixed lines stay quiet"
 }
 
 test_secondmate_idle_lapse_requires_self_continue_and_done() {
@@ -5579,6 +5609,7 @@ test_crew_absorb_class_classifier
 test_crew_worktree_written_since_classifier
 test_secondmate_output_written_since_classifier
 test_secondmate_provider_error_episode_alerts_once_and_recovers
+test_secondmate_provider_error_line_change_reopens_episode
 test_secondmate_idle_lapse_requires_self_continue_and_done
 test_secondmate_idle_lapse_stale_output_cannot_mask_later_silence
 test_secondmate_idle_lapse_skips_rendered_busy_pane
