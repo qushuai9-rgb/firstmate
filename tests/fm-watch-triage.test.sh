@@ -3586,7 +3586,23 @@ test_secondmate_provider_error_episode_alerts_once_and_recovers() {
   assert_contains "$out" 'check: secondmate provider error: mate=mate' "contextual HTTP 502 did not alert"
   printf 'ready\n' > "$capture"
   run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick >/dev/null
-  [ ! -e "$state/.secondmate-provider-error-mate" ] || fail "provider error marker did not clear before the rate-limit case"
+  [ ! -e "$state/.secondmate-provider-error-mate" ] || fail "provider error marker did not clear before the rendering cases"
+  # Provider failures render the context on either side of the code, often with
+  # a connector word between; each form must alert and then clear.
+  local line
+  for line in 'fetch failed: 502' 'upstream: 502' 'dasein returned 502' 'Received an error (502)' 'the server returned HTTP 503'; do
+    printf '%s\n' "$line" > "$capture"
+    out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
+    assert_contains "$out" 'check: secondmate provider error: mate=mate' "provider rendering did not alert: $line"
+    printf 'ready\n' > "$capture"
+    run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick >/dev/null
+    [ ! -e "$state/.secondmate-provider-error-mate" ] || fail "provider error marker did not clear for: $line"
+  done
+  # A provider word far from the number in ordinary output is not a failure.
+  printf 'the server processed 500 rows\n' > "$capture"
+  out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
+  [ -z "$out" ] || fail "ordinary server output with a 5xx-like number alerted: $out"
+  [ ! -e "$state/.secondmate-provider-error-mate" ] || fail "ordinary server output set a provider error marker"
   printf '429 rate limit exceeded\n' > "$capture"
   out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
   assert_contains "$out" 'check: secondmate provider error: mate=mate' "provider error did not alert after recovery"

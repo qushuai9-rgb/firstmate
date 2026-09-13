@@ -863,11 +863,17 @@ EOF
 # the agent before it can append blocked: or failed:. A marker covers the whole
 # episode, and clearing it on a healthy capture permits a later episode to wake.
 secondmate_provider_error_tick() {
-  local meta task kind remote_host win tail error_line marker key queued reason error_re
+  local meta task kind remote_host win tail error_line marker key queued reason error_re provider_re
   # A bare 5xx number is ordinary agent output (row counts, commit hashes, test
   # tallies), so a match needs provider context: an upstream phrase, a known HTTP
-  # failure phrase, or an HTTP/status/error token adjacent to the code.
-  error_re='upstream[[:space:]]+access[[:space:]]+forbidden|upstream[_[:space:]]*(error|fail(ure)?)|bad[[:space:]]+gateway|gateway[[:space:]]+timeout|service[[:space:]]+unavailable|internal[[:space:]]+server[[:space:]]+error|overloaded|(http(/[0-9.]+)?|status([_[:space:]]?code)?|error)[[:space:]:=]*5[0-9][0-9]|5[0-9][0-9][[:space:]]+(upstream|internal|server|bad|gateway|service|overloaded|error|forbidden)|((rate[ -]?limit|quota|too[[:space:]]+many[[:space:]]+requests|concurren(cy|t)).*(limit|exceed|busy|request))'
+  # failure phrase, or a provider word on the same line next to the code in either
+  # order. Hex-adjacent codes are excluded so lookalikes inside hashes stay quiet.
+  provider_re='(http(/[0-9.]+)?|status([_[:space:]]?code)?|error|upstream|api|fetch|request|response|returned|provider|network|gateway|service)'
+  error_re='upstream[[:space:]]+access[[:space:]]+forbidden|upstream[_[:space:]]*(error|fail(ure)?)|bad[[:space:]]+gateway|gateway[[:space:]]+timeout|service[[:space:]]+unavailable|internal[[:space:]]+server[[:space:]]+error|overloaded'
+  error_re="$error_re|(^|[^A-Za-z0-9])$provider_re[^0-9]{0,24}[^0-9A-Fa-f]5[0-9][0-9]([^0-9A-Fa-f]|\$)"
+  error_re="$error_re|(^|[^A-Za-z0-9])server[^0-9]{0,3}[^0-9A-Fa-f]5[0-9][0-9]([^0-9A-Fa-f]|\$)"
+  error_re="$error_re|(^|[^0-9A-Fa-f])5[0-9][0-9]([^0-9A-Fa-f]|\$)[^0-9]{0,3}$provider_re"
+  error_re="$error_re|((rate[ -]?limit|quota|too[[:space:]]+many[[:space:]]+requests|concurren(cy|t)).*(limit|exceed|busy|request))"
   for meta in "$STATE"/*.meta; do
     [ -e "$meta" ] || continue
     kind=$(fm_meta_get "$meta" kind)
