@@ -51,6 +51,7 @@ bin/fm-brief.sh <id> --secondmate {<project>...|--no-projects}
 
 The scaffold writes a charter brief instead of a task brief.
 Set `FM_SECONDMATE_CHARTER='<charter>'` to fill the charter text and `FM_SECONDMATE_SCOPE='<scope>'` when the routing scope differs.
+Set `FM_SECONDMATE_SELF_CONTINUE='enabled'` when a mate is expected to end one experiment by starting the next on its own after a terminal `done:` line (default `disabled`); the scaffold writes the matching `Self-continuation: enabled|disabled` section, and the watcher derives `self_continue` from that charter line at spawn and relaunch to arm its parent-side idle-lapse detector on the enabled form.
 If you scaffold without `FM_SECONDMATE_CHARTER`, replace the `{TASK}` placeholder before seeding.
 Pass `--no-projects` instead of a project list to scaffold a project-less charter for a domain whose subject is the firstmate repo itself, whose home is a firstmate worktree and whose crews take pooled worktrees of the same repo.
 `--no-projects` is mutually exclusive with a project list, and omitting both still fails loudly, so an accidental omission is never mistaken for a deliberate project-less seed.
