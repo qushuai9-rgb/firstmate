@@ -2817,6 +2817,10 @@ test_secondmate_charter_brief_is_idle_by_default() {
   brief="$home/data/idle-sm/brief.md"
   [ -f "$brief" ] || fail "secondmate charter brief was not scaffolded"
   # Idle contract: waits for routed work, never self-initiates.
+  grep -F 'Self-continuation: disabled' "$brief" >/dev/null \
+    || fail "charter brief did not record the default disabled self-continuation policy"
+  grep -F 'provider or upstream error aborts a task' "$brief" >/dev/null \
+    || fail "charter brief does not require a blocked/failed status for provider errors"
   grep -F 'go idle and wait silently for the main firstmate' "$brief" >/dev/null \
     || fail "charter brief does not tell the secondmate to go idle and wait for routed work"
   grep -F 'Act only on tasks the main firstmate routes to you' "$brief" >/dev/null \

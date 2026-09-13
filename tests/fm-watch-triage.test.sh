@@ -3543,6 +3543,218 @@ test_busy_pane_native_progress_resets_age() {
   pass "native progress resets busy age without a completed turn or notification"
 }
 
+# --- secondmate provider-error and idle-lapse detectors --------------------
+# Provider failures can stop a mate before it writes a status event, while a
+# self-continuing mate can stop after done without entering the ordinary stale path.
+# These fixtures use only synthetic metadata, status, and pane captures.
+
+run_watch_tick() {  # <state> <fakebin> <capture> <function>
+  local state=$1 fakebin=$2 capture=$3 function=$4
+  PATH="$fakebin:$PATH" FM_HOME="$(dirname "$state")" FM_STATE_OVERRIDE="$state" \
+    FM_FAKE_TMUX_WINDOW="$(sed -n 's/^window=//p' "$state/mate.meta")" \
+    FM_FAKE_TMUX_CAPTURE="$capture" bash -c '. "$1"; wake() { printf "%s\\n" "$1"; }; "$2"' _ \
+    "$ROOT/bin/fm-watch.sh" "$function"
+}
+
+test_secondmate_provider_error_episode_alerts_once_and_recovers() {
+  local dir state fakebin out capture window home
+  dir=$(make_case secondmate-provider-error); state="$dir/state"; fakebin="$dir/fakebin"
+  capture="$dir/pane.txt"; window="test:fm-provider"; home="$dir/mate-home"
+  mkdir -p "$home/state" "$home/data" "$home/projects"
+  printf 'mate\n' > "$home/.fm-secondmate-home"
+  printf '502 Upstream access forbidden\n' > "$capture"
+  printf 'window=%s\nkind=secondmate\nharness=pi\nhome=%s\n' "$window" "$home" > "$state/mate.meta"
+  out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
+  assert_contains "$out" 'check: secondmate provider error: mate=mate' "provider error wake missing"
+  [ "$(printf '%s\n' "$out" | grep -c 'check: secondmate provider error:')" -eq 1 ] \
+    || fail "provider error episode produced duplicate wake: $out"
+  [ -f "$state/.secondmate-provider-error-mate" ] || fail "provider error episode marker missing"
+  out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
+  [ -z "$out" ] || fail "same provider error episode re-alerted: $out"
+  printf 'ready\n' > "$capture"
+  out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
+  [ -z "$out" ] || fail "healthy provider pane was not quiet: $out"
+  [ ! -e "$state/.secondmate-provider-error-mate" ] || fail "provider error marker did not clear after recovery"
+  printf '429 rate limit exceeded\n' > "$capture"
+  out=$(run_watch_tick "$state" "$fakebin" "$capture" secondmate_provider_error_tick)
+  assert_contains "$out" 'check: secondmate provider error: mate=mate' "provider error did not alert after recovery"
+  pass "secondmate provider errors alert once per episode, stay quiet when healthy, and re-alert after recovery"
+}
+
+test_secondmate_idle_lapse_requires_self_continue_and_done() {
+  local dir state fakebin out capture window home
+  dir=$(make_case secondmate-idle-lapse); state="$dir/state"; fakebin="$dir/fakebin"
+  capture="$dir/pane.txt"; window="test:fm-idle"; home="$dir/mate-home"
+  mkdir -p "$home/state" "$home/data" "$home/projects"
+  printf 'mate\n' > "$home/.fm-secondmate-home"
+  printf 'idle\n' > "$capture"
+  printf 'window=%s\nkind=secondmate\nharness=pi\nhome=%s\nself_continue=1\n' "$window" "$home" > "$state/mate.meta"
+  printf 'done: exp-038 complete\n' > "$state/mate.status"
+  set_mtime "$(( $(date +%s) - 10 ))" "$state/mate.status"
+  out=$(FM_SECONDMATE_IDLE_LAPSE_SECS=1 run_watch_tick "$state" "$fakebin" "$capture" secondmate_idle_lapse_tick)
+  assert_contains "$out" 'idle lapse' "self-continuing done lapse did not alert"
+  grep -v '^self_continue=1$' "$state/mate.meta" > "$state/mate.meta.tmp"
+  mv "$state/mate.meta.tmp" "$state/mate.meta"
+  rm -f "$state/.secondmate-idle-alerted-mate"
+  out=$(FM_SECONDMATE_IDLE_LAPSE_SECS=1 run_watch_tick "$state" "$fakebin" "$capture" secondmate_idle_lapse_tick)
+  [ -z "$out" ] || fail "idle lapse alerted without self_continue=1: $out"
+  pass "idle lapse requires the self_continue=1 metadata opt-in and a terminal done status"
+}
+
+# --- secondmate turn-in-progress hang detector -----------------------------
+# A working secondmate skips the ordinary pane-stale path, so BUSY_TURN_MAX_SECS
+# never reaches it. secondmate_turn_hang_tick closes that gap with dual zero-growth
+# confirmation: past turn_hang_secs / FM_SECONDMATE_TURN_HANG_SECS, with no native
+# progress growth and no durable output growth across confirming polls, one stale
+# wake surfaces for inspection only.
+
+test_secondmate_turn_hang_zero_growth_escalates() {
+  local dir state fakebin out capture_file window home pid sig
+  dir=$(make_case secondmate-turn-hang-zero); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; capture_file="$dir/pane.txt"; window="test:fm-mate-hang"
+  home="$dir/mate-home"
+  mkdir -p "$home/state" "$home/data" "$home/projects"
+  printf 'mate\n' > "$home/.fm-secondmate-home"
+  printf 'Working... (long turn)\n' > "$capture_file"
+  printf 'window=%s\nkind=secondmate\nharness=pi\nhome=%s\n' "$window" "$home" > "$state/mate.meta"
+  record_pi_busy "$state" mate
+  printf 'working: long experiment\n' > "$state/mate.status"
+  sig=$(seen_sig "$state/mate.status"); printf '%s' "$sig" > "$state/.seen-mate_status"
+  # Age the spawn record past the hang bound; no progress, no turn-ended, no output.
+  touch -t 200001010000 "$state/mate.meta"
+  # Pre-seed confirmation count at CONFIRM-1 so one poll completes the ladder,
+  # matching the wedge-timer fixtures that pre-seed .stale-since. wait_poll_cycle
+  # spans two full polls, so opening+confirming inside one wait would race.
+  printf '1\n' > "$state/.secondmate-turn-hang-mate"
+  : > "$state/.secondmate-turn-hang-anchor-mate"
+  printf '0\n' > "$state/.secondmate-turn-hang-progress-mate"
+
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_STATE_OVERRIDE="$state" FM_SECONDMATE_TURN_HANG_SECS=1 FM_SECONDMATE_TURN_HANG_CONFIRM=2 \
+    FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
+    "$WATCH" > "$out" &
+  pid=$!
+  wait_for_exit "$pid" 100 || fail "zero-growth secondmate turn hang did not escalate"
+  grep -F "stale: $window" "$out" >/dev/null \
+    || fail "zero-growth hang did not print a stale wake: $(cat "$out")"
+  grep -F 'turn hang suspect' "$out" >/dev/null \
+    || fail "zero-growth hang wake lacked the turn-hang wording: $(cat "$out")"
+  grep -F 'interrupt+relaunch' "$out" >/dev/null \
+    || fail "zero-growth hang wake lacked the interrupt+relaunch suggestion"
+  [ -f "$state/.secondmate-turn-hang-alerted-mate" ] \
+    || fail "zero-growth hang did not record its alerted marker"
+  pass "secondmate turn hang with zero progress and zero output escalates after confirming polls"
+}
+
+test_secondmate_turn_hang_output_growth_suppresses() {
+  local dir state fakebin out capture_file window home pid sig back
+  dir=$(make_case secondmate-turn-hang-output); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; capture_file="$dir/pane.txt"; window="test:fm-mate-out"
+  home="$dir/mate-home"
+  mkdir -p "$home/state" "$home/data" "$home/projects"
+  printf 'mate\n' > "$home/.fm-secondmate-home"
+  printf 'Working... (long turn)\n' > "$capture_file"
+  printf 'window=%s\nkind=secondmate\nharness=pi\nhome=%s\n' "$window" "$home" > "$state/mate.meta"
+  record_pi_busy "$state" mate
+  printf 'working: long experiment\n' > "$state/mate.status"
+  sig=$(seen_sig "$state/mate.status"); printf '%s' "$sig" > "$state/.seen-mate_status"
+  touch -t 200001010000 "$state/mate.meta"
+  # Observation already open; durable product newer than the anchor suppresses.
+  printf '1\n' > "$state/.secondmate-turn-hang-mate"
+  : > "$state/.secondmate-turn-hang-anchor-mate"
+  back=$(( $(date +%s) - 5 ))
+  set_mtime "$back" "$state/.secondmate-turn-hang-anchor-mate"
+  printf '0\n' > "$state/.secondmate-turn-hang-progress-mate"
+  printf 'partial result\n' > "$home/data/result.md"
+
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_STATE_OVERRIDE="$state" FM_SECONDMATE_TURN_HANG_SECS=1 FM_SECONDMATE_TURN_HANG_CONFIRM=2 \
+    FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
+    "$WATCH" > "$out" &
+  pid=$!
+  if ! wait_poll_cycle "$state" "$pid"; then
+    reap "$pid"; fail "output growth still escalated a secondmate turn hang: $(cat "$out")"
+  fi
+  [ ! -s "$out" ] || { reap "$pid"; fail "output growth printed a hang wake: $(cat "$out")"; }
+  # Growth clears the open episode before it can alert. wait_poll_cycle spans two
+  # polls, so a still-over-age mate may open a fresh observation afterward; that
+  # is a new episode, not a failed suppress. The alerted marker must stay absent.
+  [ ! -f "$state/.secondmate-turn-hang-alerted-mate" ] \
+    || { reap "$pid"; fail "output growth left an alerted hang marker"; }
+  reap "$pid"
+  pass "secondmate turn hang with durable output growth does not escalate"
+}
+
+test_secondmate_turn_hang_progress_update_suppresses() {
+  local dir state fakebin out capture_file window home pid sig
+  dir=$(make_case secondmate-turn-hang-progress); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; capture_file="$dir/pane.txt"; window="test:fm-mate-prog"
+  home="$dir/mate-home"
+  mkdir -p "$home/state" "$home/data" "$home/projects"
+  printf 'mate\n' > "$home/.fm-secondmate-home"
+  printf 'Working... (long turn)\n' > "$capture_file"
+  printf 'window=%s\nkind=secondmate\nharness=pi\nhome=%s\n' "$window" "$home" > "$state/mate.meta"
+  record_pi_busy "$state" mate
+  printf 'working: long experiment\n' > "$state/mate.status"
+  sig=$(seen_sig "$state/mate.status"); printf '%s' "$sig" > "$state/.seen-mate_status"
+  touch -t 200001010000 "$state/mate.meta"
+  touch -t 200001010000 "$state/mate.turn-ended"
+  prime_turnend_seen "$state/mate.turn-ended"
+  # Observation open with snap 0; a newer native progress mtime clears it.
+  # Keep the hang bound large after progress so wait_poll_cycle's second poll
+  # cannot re-open a hang on progress that has aged a second (bound=1 would).
+  printf '1\n' > "$state/.secondmate-turn-hang-mate"
+  : > "$state/.secondmate-turn-hang-anchor-mate"
+  printf '0\n' > "$state/.secondmate-turn-hang-progress-mate"
+  touch "$state/mate.progress"
+
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_STATE_OVERRIDE="$state" FM_SECONDMATE_TURN_HANG_SECS=999 FM_SECONDMATE_TURN_HANG_CONFIRM=2 \
+    FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
+    "$WATCH" > "$out" &
+  pid=$!
+  if ! wait_poll_cycle "$state" "$pid"; then
+    reap "$pid"; fail "native progress still escalated a secondmate turn hang: $(cat "$out")"
+  fi
+  [ ! -s "$out" ] || { reap "$pid"; fail "native progress printed a hang wake: $(cat "$out")"; }
+  [ ! -f "$state/.secondmate-turn-hang-mate" ] \
+    || { reap "$pid"; fail "native progress left the hang observation open"; }
+  reap "$pid"
+  pass "secondmate turn hang with native progress update does not escalate"
+}
+
+test_secondmate_turn_hang_short_turn_does_not_alarm() {
+  local dir state fakebin out capture_file window home pid sig
+  dir=$(make_case secondmate-turn-hang-short); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; capture_file="$dir/pane.txt"; window="test:fm-mate-short"
+  home="$dir/mate-home"
+  mkdir -p "$home/state" "$home/data" "$home/projects"
+  printf 'mate\n' > "$home/.fm-secondmate-home"
+  printf 'Working... (fresh turn)\n' > "$capture_file"
+  printf 'window=%s\nkind=secondmate\nharness=pi\nhome=%s\n' "$window" "$home" > "$state/mate.meta"
+  record_pi_busy "$state" mate
+  printf 'working: just started\n' > "$state/mate.status"
+  sig=$(seen_sig "$state/mate.status"); printf '%s' "$sig" > "$state/.seen-mate_status"
+  # Fresh meta: age well below the hang bound.
+  touch "$state/mate.meta"
+
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_STATE_OVERRIDE="$state" FM_SECONDMATE_TURN_HANG_SECS=999 FM_SECONDMATE_TURN_HANG_CONFIRM=2 \
+    FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
+    "$WATCH" > "$out" &
+  pid=$!
+  if ! wait_poll_cycle "$state" "$pid"; then
+    reap "$pid"; fail "a short secondmate turn was escalated: $(cat "$out")"
+  fi
+  [ ! -s "$out" ] || { reap "$pid"; fail "a short secondmate turn printed a hang wake: $(cat "$out")"; }
+  [ ! -f "$state/.secondmate-turn-hang-mate" ] \
+    || { reap "$pid"; fail "a short secondmate turn opened a hang observation"; }
+  [ ! -f "$state/.secondmate-turn-hang-alerted-mate" ] \
+    || { reap "$pid"; fail "a short secondmate turn left an alerted hang marker"; }
+  reap "$pid"
+  pass "a short secondmate turn below the hang bound does not alarm"
+}
+
 test_busy_pane_repeated_escalation_reaches_demand_deep_inspection() {
   local dir state fakebin out capture_file window key pane_hash sig pid n
   dir=$(make_case busy-turn-age-demand-inspect); state="$dir/state"; fakebin="$dir/fakebin"
@@ -5147,6 +5359,9 @@ test_crew_is_provably_working_classifier
 test_status_is_paused_classifier
 test_crew_absorb_class_classifier
 test_crew_worktree_written_since_classifier
+test_secondmate_output_written_since_classifier
+test_secondmate_provider_error_episode_alerts_once_and_recovers
+test_secondmate_idle_lapse_requires_self_continue_and_done
 test_empty_write_prune_widens_the_probe
 test_empty_write_prune_from_the_environment_widens_the_probe
 test_worktree_write_probe_is_wall_clock_bounded

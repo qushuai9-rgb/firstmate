@@ -231,6 +231,11 @@ else
 fi
 SECONDMATE_CHARTER=${FM_SECONDMATE_CHARTER:-"{TASK}"}
 SECONDMATE_SCOPE=${FM_SECONDMATE_SCOPE:-${FM_SECONDMATE_CHARTER:-"{TASK}"}}
+SECONDMATE_SELF_CONTINUE=${FM_SECONDMATE_SELF_CONTINUE:-disabled}
+case "$SECONDMATE_SELF_CONTINUE" in
+  enabled|disabled) ;;
+  *) echo "error: FM_SECONDMATE_SELF_CONTINUE must be enabled or disabled" >&2; exit 1 ;;
+esac
 if [ "$NO_PROJECTS" -eq 1 ]; then
   PROJECT_CLONES_BODY="None. This is a project-less domain: its subject is the firstmate repo this home lives in, so it needs no separate clones under \`projects/\`; its crews take pooled worktrees of that firstmate repo."
   PROJECT_CLONES_NOTE="This domain has no separate project clones: its subject is the firstmate repo this home lives in, and its crews take pooled worktrees of that repo."
@@ -249,6 +254,9 @@ $SECONDMATE_SCOPE
 
 # Project clones
 $PROJECT_CLONES_BODY
+
+# Continuation policy
+Self-continuation: $SECONDMATE_SELF_CONTINUE
 
 # Operating model
 You are in an isolated firstmate home. The local \`AGENTS.md\` is your job description, and your local \`data/\`, \`state/\`, \`config/\`, and \`projects/\` dirs are yours to operate.
@@ -288,6 +296,7 @@ Report only true captain-relevant outcomes or a declared external wait by append
 States: working, needs-decision, blocked, $PAUSED_VERB, done, failed.
 Use \`$PAUSED_VERB: {why}\` (distinct from \`blocked:\`) only when your domain is deliberately idling on a known external wait you expect to clear on its own, naming when it clears with \`until <YYYY-MM-DDTHH:MMZ>\` (UTC) when you know; use \`blocked:\` when you are stuck and need firstmate to act.
 Use this only for material phase changes, a captain decision, a real blocker, a failure, work ready for review, or work you landed.
+If a provider or upstream error aborts a task, append \`blocked: {error summary}\` or \`failed: {error summary}\` before stopping; never stop silently.
 Work you landed includes a merge you performed yourself under standing merge authority and one the captain merged on the forge: under that authority nothing is ever \"ready for review\", so a landed merge that goes unreported reaches the captain as silence.
 This is also how you return the answer to a marked from-firstmate request above.
 A marked request requires one correlated answer after the work; it does not require a separate receipt or start acknowledgement.

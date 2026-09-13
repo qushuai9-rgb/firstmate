@@ -106,6 +106,10 @@
 #   check: inactive-outcome bounded poll-loop reconciliation found a suspicious
 #                          inactive terminal outcome that still lacks its durable
 #                          upstream receipt
+#   check: secondmate provider error: mate=<id> <summary>
+#                          a local secondmate pane tail contains a provider or
+#                          upstream failure; one wake is emitted per error
+#                          episode and the marker clears when the pane recovers
 #   check: secondmate wake-loop stalled: mate=<id> row=<seq> idle=<seconds>s
 #                          an actionable row in an endpoint-recorded local
 #                          secondmate home's durable wake queue did not advance
@@ -848,6 +852,263 @@ EOF
     fi
     fm_wake_secondmate_stall_receipt_write "$task" "$row_key" || return 1
     fm_wake_secondmate_stall_marker_write "$task" "$row_key" || return 1
+    wake "$reason"
+  done
+  return 0
+}
+
+# Surface one provider-error check for a local secondmate pane. The pane tail is
+# bounded and is the only source used here: status logs remain owned by the
+# secondmate status contract, while this catches a provider failure that stops
+# the agent before it can append blocked: or failed:. A marker covers the whole
+# episode, and clearing it on a healthy capture permits a later episode to wake.
+secondmate_provider_error_tick() {
+  local meta task kind remote_host win tail error_line marker key queued reason
+  for meta in "$STATE"/*.meta; do
+    [ -e "$meta" ] || continue
+    kind=$(fm_meta_get "$meta" kind)
+    [ "$kind" = secondmate ] || continue
+    remote_host=$(fm_meta_get "$meta" remote_host)
+    [ -z "$remote_host" ] || continue
+    task=${meta##*/}
+    task=${task%.meta}
+    case "$task" in ''|*[!A-Za-z0-9._-]*) continue ;; esac
+    win=$(fm_backend_target_of_meta "$meta")
+    [ -n "$win" ] || continue
+    tail=$(fm_backend_capture "$(window_backend "$win")" "$win" 80 "$(window_label "$win")" 2>/dev/null) || {
+      # An unreadable pane is not evidence that a provider episode ended.
+      # Preserve the marker and let the next successful capture classify it.
+      continue
+    }
+    marker="$STATE/.secondmate-provider-error-$task"
+    if ! printf '%s\n' "$tail" | grep -Eiq '(^|[^0-9])5[0-9][0-9]([^0-9]|$)|upstream[[:space:]]+access[[:space:]]+forbidden|upstream_error|((rate[ -]?limit|quota|too[[:space:]]+many[[:space:]]+requests|concurren(cy|t)).*(limit|exceed|busy|request))'; then
+      if [ -e "$marker" ] || [ -L "$marker" ]; then
+        [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
+        rm -f "$marker" || return 1
+      fi
+      continue
+    fi
+    if [ -e "$marker" ] || [ -L "$marker" ]; then
+      [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
+      continue
+    fi
+    error_line=$(printf '%s\n' "$tail" | grep -Ei '(^|[^0-9])5[0-9][0-9]([^0-9]|$)|upstream[[:space:]]+access[[:space:]]+forbidden|upstream_error|((rate[ -]?limit|quota|too[[:space:]]+many[[:space:]]+requests|concurren(cy|t)).*(limit|exceed|busy|request))' | tail -1 | tr '\t\r\n' ' ' | cut -c1-240)
+    [ -n "$error_line" ] || error_line="provider or upstream error detected in pane tail"
+    key="secondmate-provider-error-$task"
+    reason="check: secondmate provider error: mate=$task $error_line"
+    queued=$(fm_wake_queued_keys check)
+    if ! printf '%s\n' "$queued" | grep -Fx "$key" >/dev/null 2>&1; then
+      fm_wake_append check "$key" "$reason" || return 1
+    fi
+    : > "$marker" || return 1
+    wake "$reason"
+  done
+  return 0
+}
+
+# Per-task turn hang bound for a secondmate: meta turn_hang_secs= wins when it is a
+# positive integer, otherwise the home default SECONDMATE_TURN_HANG_SECS applies.
+secondmate_turn_hang_bound_secs() {  # <meta-file>
+  local meta=$1 raw
+  raw=$(fm_meta_get "$meta" turn_hang_secs)
+  case "$raw" in
+    ''|*[!0-9]*|0) printf '%s\n' "$SECONDMATE_TURN_HANG_SECS" ;;
+    *) printf '%s\n' "$raw" ;;
+  esac
+}
+
+# Clear a secondmate turn-hang observation when the mate is no longer a hang
+# candidate (idle, declared wait, fresh progress, or output growth). The alerted
+# marker is separate so one episode still surfaces only once until the hang ends.
+secondmate_turn_hang_clear_observation() {  # <task>
+  local task=$1
+  rm -f "$STATE/.secondmate-turn-hang-$task" \
+    "$STATE/.secondmate-turn-hang-anchor-$task" \
+    "$STATE/.secondmate-turn-hang-progress-$task"
+}
+
+# Idle-lapse bound for a self-continuing secondmate: meta idle_lapse_secs= wins
+# when it is a positive integer, otherwise FM_SECONDMATE_IDLE_LAPSE_SECS
+# (default 7200) applies.
+secondmate_idle_lapse_bound_secs() {  # <meta-file>
+  local meta_file=$1 raw
+  raw=$(fm_meta_get "$meta_file" idle_lapse_secs)
+  case "$raw" in
+    ''|*[!0-9]*|0) printf '%s\n' "$SECONDMATE_IDLE_LAPSE_SECS" ;;
+    *) printf '%s\n' "$raw" ;;
+  esac
+}
+
+# Parent-side idle-lapse detector for self-continuing secondmates. A mate whose
+# charter says "turn ends by starting the next experiment" can stop silently
+# right after a terminal done: line - the pane is not busy, so the turn-hang
+# tick skips it, and the ordinary pane-stale path skips secondmates by design,
+# leaving the "done but not continuing" form in a supervision gap (observed
+# live 2026-09-13). Generic idle is healthy, so this tick arms only on the
+# explicit meta self_continue=1 opt-in, and it fires only when ALL of:
+#   - the newest status line's verb is a terminal done
+#   - the mate is not busy (turn-hang tick owns the busy form)
+#   - the status file's age exceeds the idle-lapse bound
+#   - no durable output growth under the mate's product roots since that
+#     status line (writing a report counts as continuing)
+# One stale wake per lapse episode; the marker clears only when the mate works
+# or reports again, so a later genuine lapse alarms afresh.
+secondmate_idle_lapse_tick() {
+  local meta task kind remote_host home win bound age last verb anchor reason queued
+  for meta in "$STATE"/*.meta; do
+    [ -e "$meta" ] || continue
+    kind=$(fm_meta_get "$meta" kind)
+    [ "$kind" = secondmate ] || continue
+    [ "$(fm_meta_get "$meta" self_continue)" = 1 ] || continue
+    remote_host=$(fm_meta_get "$meta" remote_host)
+    [ -z "$remote_host" ] || continue
+    task=${meta##*/}
+    task=${task%.meta}
+    case "$task" in ''|*[!A-Za-z0-9._-]*) continue ;; esac
+    home=$(fm_meta_get "$meta" home)
+    [ -n "$home" ] || continue
+    [ -f "$home/.fm-secondmate-home" ] && [ ! -L "$home/.fm-secondmate-home" ] || continue
+    [ "$(cat "$home/.fm-secondmate-home" 2>/dev/null || true)" = "$task" ] || continue
+    win=$(fm_backend_target_of_meta "$meta")
+    [ -n "$win" ] || continue
+    last=$(last_status_line "$STATE/$task.status")
+    verb=${last%%:*}
+    verb=${verb%%\[*}
+    [ "$verb" = done ] || { rm -f "$STATE/.secondmate-idle-alerted-$task"; continue; }
+    if window_is_busy "$win" ""; then
+      rm -f "$STATE/.secondmate-idle-alerted-$task"
+      continue
+    fi
+    bound=$(secondmate_idle_lapse_bound_secs "$meta")
+    age=$(age_of "$STATE/$task.status")
+    [ "$age" -ge "$bound" ] || { rm -f "$STATE/.secondmate-idle-alerted-$task"; continue; }
+    # Report writing or any product output since the done line means the
+    # mate is still working; that is continuation, not a lapse.
+    if secondmate_output_written_since "$task" "$STATE" "$STATE/$task.status"; then
+      rm -f "$STATE/.secondmate-idle-alerted-$task"
+      continue
+    fi
+    [ -f "$STATE/.secondmate-idle-alerted-$task" ] && continue
+    reason="stale: $win (idle lapse: done $(( age / 3600 ))h ago with self-continue charter but no next action; consider relaunch with charter reminder)"
+    queued=$(fm_wake_queued_keys stale)
+    if ! printf '%s\n' "$queued" | grep -Fx "$win" >/dev/null 2>&1; then
+      fm_wake_append stale "$win" "$reason" || return 1
+    fi
+    : > "$STATE/.secondmate-idle-alerted-$task" || return 1
+    wake "$reason"
+  done
+  return 0
+}
+
+# Parent-side turn-in-progress hang detector for local secondmates. Ordinary crews
+# already reach busy_turn_over_age through the pane-stale path; secondmates skip
+# that path while working, so a hung mid-turn mate never produced a turn-ended
+# marker and never entered the busy-turn bound. This tick closes that gap without
+# inventing a parallel escalation ladder:
+#   - only kind=secondmate local mates with an exact busy verdict
+#   - age from the same completed-turn / native-progress / spawn-record markers
+#     busy_turn_over_age already trusts, measured against the per-task hang bound
+#   - dual zero-growth: native progress mtime AND durable output roots both quiet
+#     since the observation anchor (secondmate_output_written_since)
+#   - SECONDMATE_TURN_HANG_CONFIRM consecutive confirming polls before one stale wake
+#   - inspection-only wording; never an automatic interrupt or relaunch
+# A declared pause or captain-held transfer keeps the ordinary pause cadence and
+# never feeds this path. One episode surfaces once; clearing requires the hang
+# conditions to end so a later genuine hang can alarm again.
+secondmate_turn_hang_tick() {
+  local meta task kind remote_host home win bound age minutes confirm_need confirm_have
+  local last progress_file progress_snap prev_progress age_src anchor obs reason queued
+  for meta in "$STATE"/*.meta; do
+    [ -e "$meta" ] || continue
+    kind=$(fm_meta_get "$meta" kind)
+    [ "$kind" = secondmate ] || continue
+    remote_host=$(fm_meta_get "$meta" remote_host)
+    [ -z "$remote_host" ] || continue
+    task=${meta##*/}
+    task=${task%.meta}
+    case "$task" in ''|*[!A-Za-z0-9._-]*) continue ;; esac
+    home=$(fm_meta_get "$meta" home)
+    [ -n "$home" ] || continue
+    [ -f "$home/.fm-secondmate-home" ] && [ ! -L "$home/.fm-secondmate-home" ] || continue
+    [ "$(cat "$home/.fm-secondmate-home" 2>/dev/null || true)" = "$task" ] || continue
+    win=$(fm_backend_target_of_meta "$meta")
+    [ -n "$win" ] || continue
+    last=$(last_status_line "$STATE/$task.status")
+    if status_is_paused_or_captain_held "$last"; then
+      secondmate_turn_hang_clear_observation "$task"
+      rm -f "$STATE/.secondmate-turn-hang-alerted-$task"
+      continue
+    fi
+    # Exact busy only. Idle/unknown/dead leave ordinary secondmate supervision alone.
+    if ! window_is_busy "$win" ""; then
+      secondmate_turn_hang_clear_observation "$task"
+      rm -f "$STATE/.secondmate-turn-hang-alerted-$task"
+      continue
+    fi
+    bound=$(secondmate_turn_hang_bound_secs "$meta")
+    # busy_turn_over_age is hard-wired to BUSY_TURN_MAX_SECS; compute the same
+    # marker age against the (possibly tighter) secondmate hang bound here.
+    progress_file="$STATE/$task.progress"
+    age_src="$STATE/$task.turn-ended"
+    [ -e "$age_src" ] || age_src="$meta"
+    if [ -f "$progress_file" ] && [ "$progress_file" -nt "$age_src" ]; then
+      age_src="$progress_file"
+    fi
+    age=$(age_of "$age_src")
+    if [ "$age" -lt "$bound" ]; then
+      secondmate_turn_hang_clear_observation "$task"
+      rm -f "$STATE/.secondmate-turn-hang-alerted-$task"
+      continue
+    fi
+    progress_snap=
+    if [ -f "$progress_file" ]; then
+      progress_snap=$(stat_mtime "$progress_file" 2>/dev/null || true)
+    fi
+    case "$progress_snap" in ''|*[!0-9]*) progress_snap=0 ;; esac
+    obs="$STATE/.secondmate-turn-hang-$task"
+    anchor="$STATE/.secondmate-turn-hang-anchor-$task"
+    if [ ! -f "$obs" ]; then
+      # First sight past the bound opens the dual-zero confirmation window.
+      # Growth is judged from this anchor on later polls; this poll itself is
+      # confirmation 1 of SECONDMATE_TURN_HANG_CONFIRM.
+      printf '1\n' > "$obs" || return 1
+      : > "$anchor" || return 1
+      printf '%s\n' "$progress_snap" > "$STATE/.secondmate-turn-hang-progress-$task" || return 1
+      [ "$SECONDMATE_TURN_HANG_CONFIRM" -le 1 ] || continue
+      confirm_have=1
+    else
+      # Progress mtime advanced since observation opened -> real activity.
+      prev_progress=$(cat "$STATE/.secondmate-turn-hang-progress-$task" 2>/dev/null || true)
+      case "$prev_progress" in ''|*[!0-9]*) prev_progress=0 ;; esac
+      if [ "$progress_snap" -gt "$prev_progress" ]; then
+        secondmate_turn_hang_clear_observation "$task"
+        rm -f "$STATE/.secondmate-turn-hang-alerted-$task"
+        continue
+      fi
+      # Durable output growth since the observation anchor is positive evidence.
+      if secondmate_output_written_since "$task" "$STATE" "$anchor"; then
+        secondmate_turn_hang_clear_observation "$task"
+        rm -f "$STATE/.secondmate-turn-hang-alerted-$task"
+        continue
+      fi
+      confirm_have=$(( $(cat "$obs" 2>/dev/null || echo 0) + 1 ))
+      echo "$confirm_have" > "$obs" || return 1
+    fi
+    confirm_need=$SECONDMATE_TURN_HANG_CONFIRM
+    [ "$confirm_have" -ge "$confirm_need" ] || continue
+    # One surface per hang episode until the hang conditions clear.
+    if [ -f "$STATE/.secondmate-turn-hang-alerted-$task" ]; then
+      continue
+    fi
+    minutes=$(( age / 60 ))
+    reason="stale: $win (turn hang suspect: turn ${minutes}m with zero progress and zero output growth; consider interrupt+relaunch)"
+    queued=$(fm_wake_queued_keys stale)
+    if ! printf '%s\n' "$queued" | grep -Fx "$win" >/dev/null 2>&1; then
+      fm_wake_append stale "$win" "$reason" || return 1
+    fi
+    : > "$STATE/.secondmate-turn-hang-alerted-$task" || return 1
+    # Keep observation markers so a still-hung mate does not re-open a fresh
+    # confirmation ladder every poll; clearing happens only when hang ends.
     wake "$reason"
   done
   return 0
@@ -2115,6 +2376,34 @@ while :; do
     exit 1
   }
 
+<<<<<<< HEAD
+=======
+  # A local secondmate pane can expose a provider failure before the agent writes
+  # its required blocked: or failed: status line. Scan the bounded tail before
+  # slower supervision paths so a short-lived error still produces one check.
+  secondmate_provider_error_tick || {
+    echo "watcher: secondmate provider-error observation failed" >&2
+    exit 1
+  }
+
+  # A secondmate skips the ordinary pane-stale path while working, so a hung
+  # mid-turn mate never reaches busy_turn_over_age. Observe exact-busy mates
+  # past the turn-hang bound with dual zero-growth confirmation before one stale.
+  secondmate_turn_hang_tick || {
+    echo "watcher: secondmate turn-hang observation failed" >&2
+    exit 1
+  }
+
+  # A self-continuing secondmate that stops right after a terminal done line
+  # is neither busy (turn-hang tick skips it) nor anomalous to the ordinary
+  # stale path (secondmates are skipped by design). Observe the explicit
+  # self_continue=1 opt-in for that done-but-not-continuing form.
+  secondmate_idle_lapse_tick || {
+    echo "watcher: secondmate idle-lapse observation failed" >&2
+    exit 1
+  }
+
+>>>>>>> 7f1540b1 (fix(watch): close secondmate monitoring gaps)
   # Process-to-event liveness repair. This never discovers a result by polling:
   # each registered source has its own child blocking on that source, and this
   # only republishes results already captured durably and restarts a source
