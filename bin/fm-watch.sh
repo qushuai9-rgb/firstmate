@@ -1036,13 +1036,26 @@ secondmate_idle_lapse_bound_secs() {  # <meta-file>
 #     refreshed anchor means one write can only suppress one window)
 # One stale wake per lapse episode; the marker clears only when the mate works
 # or reports again, so a later genuine lapse alarms afresh.
+secondmate_self_continue_effective() {  # <meta-file> <home>
+  local meta=$1 home=$2 v brief
+  v=$(fm_meta_get "$meta" self_continue)
+  case "$v" in 0|1) printf '%s\n' "$v"; return 0 ;; esac
+  if [ -f "$home/data/charter.md" ]; then
+    brief="$home/data/charter.md"
+  else
+    brief="$FM_HOME/data/${meta##*/}"
+    brief="${brief%.meta}/brief.md"
+  fi
+  grep '^Self-continuation: enabled$' "$brief" >/dev/null 2>&1 && { printf '1\n'; return 0; }
+  printf '0\n'
+}
+
 secondmate_idle_lapse_tick() {
   local meta task kind remote_host home win bound age last verb anchor reason queued
   for meta in "$STATE"/*.meta; do
     [ -e "$meta" ] || continue
     kind=$(fm_meta_get "$meta" kind)
     [ "$kind" = secondmate ] || continue
-    [ "$(fm_meta_get "$meta" self_continue)" = 1 ] || continue
     remote_host=$(fm_meta_get "$meta" remote_host)
     [ -z "$remote_host" ] || continue
     task=${meta##*/}
@@ -1050,6 +1063,7 @@ secondmate_idle_lapse_tick() {
     case "$task" in ''|*[!A-Za-z0-9._-]*) continue ;; esac
     home=$(fm_meta_get "$meta" home)
     [ -n "$home" ] || continue
+    [ "$(secondmate_self_continue_effective "$meta" "$home")" = 1 ] || continue
     [ -f "$home/.fm-secondmate-home" ] && [ ! -L "$home/.fm-secondmate-home" ] || continue
     [ "$(cat "$home/.fm-secondmate-home" 2>/dev/null || true)" = "$task" ] || continue
     win=$(fm_backend_target_of_meta "$meta")

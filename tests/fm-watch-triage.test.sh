@@ -3751,6 +3751,34 @@ test_secondmate_idle_lapse_skips_rendered_busy_pane() {
   pass "idle lapse defers a pane that is provably busy on its next turn"
 }
 
+# A pre-existing self-continuing secondmate whose meta predates the self_continue
+# field (the incident's own quant-researcher) is still guarded: the effective
+# policy is re-derived from the local charter's Self-continuation: enabled line
+# rather than skipped until respawn. A disabled or absent charter stays quiet.
+test_secondmate_idle_lapse_reconciles_charter_for_pre_existing_meta() {
+  local dir state fakebin out capture window home
+  dir=$(make_case secondmate-idle-lapse-charter); state="$dir/state"; fakebin="$dir/fakebin"
+  capture="$dir/pane.txt"; window="test:fm-idle-charter"; home="$dir/mate-home"
+  mkdir -p "$home/state" "$home/data" "$home/projects"
+  printf 'mate\n' > "$home/.fm-secondmate-home"
+  printf 'idle\n' > "$capture"
+  printf 'window=%s\nkind=secondmate\nharness=pi\nhome=%s\n' "$window" "$home" > "$state/mate.meta"
+  printf 'done: exp-038 complete\n' > "$state/mate.status"
+  set_mtime "$(( $(date +%s) - 30 ))" "$state/mate.status"
+  out=$(FM_SECONDMATE_IDLE_LAPSE_SECS=1 run_watch_tick "$state" "$fakebin" "$capture" secondmate_idle_lapse_tick)
+  [ -z "$out" ] || fail "a pre-existing mate with no charter was escalated as an idle lapse: $out"
+  printf 'Self-continuation: enabled\n' > "$home/data/charter.md"
+  set_mtime "$(( $(date +%s) - 60 ))" "$home/data/charter.md"
+  out=$(FM_SECONDMATE_IDLE_LAPSE_SECS=1 run_watch_tick "$state" "$fakebin" "$capture" secondmate_idle_lapse_tick)
+  assert_contains "$out" 'idle lapse' "a charter-enabled pre-existing mate's done lapse did not alert"
+  rm -f "$state/.secondmate-idle-alerted-mate"
+  printf 'Self-continuation: disabled\n' > "$home/data/charter.md"
+  set_mtime "$(( $(date +%s) - 60 ))" "$home/data/charter.md"
+  out=$(FM_SECONDMATE_IDLE_LAPSE_SECS=1 run_watch_tick "$state" "$fakebin" "$capture" secondmate_idle_lapse_tick)
+  [ -z "$out" ] || fail "a charter-disabled mate alerted as an idle lapse: $out"
+  pass "idle lapse reconciles the effective self-continue policy from the charter for a pre-existing meta"
+}
+
 # --- secondmate turn-in-progress hang detector -----------------------------
 # A working secondmate skips the ordinary pane-stale path, so BUSY_TURN_MAX_SECS
 # never reaches it. secondmate_turn_hang_tick closes that gap with dual zero-growth
@@ -5613,6 +5641,7 @@ test_secondmate_provider_error_line_change_reopens_episode
 test_secondmate_idle_lapse_requires_self_continue_and_done
 test_secondmate_idle_lapse_stale_output_cannot_mask_later_silence
 test_secondmate_idle_lapse_skips_rendered_busy_pane
+test_secondmate_idle_lapse_reconciles_charter_for_pre_existing_meta
 test_empty_write_prune_widens_the_probe
 test_empty_write_prune_from_the_environment_widens_the_probe
 test_worktree_write_probe_is_wall_clock_bounded
