@@ -537,45 +537,39 @@ _fm_pending_reply_record_state() {  # <status-file> <decision-key> -> 0|1|2
   local f=$1 key=$2 corr state dir rec phase
   corr=${key#pending-reply-}
   [ -n "$corr" ] && [ "$corr" != "$key" ] || return 2
+  case "$corr" in
+    ''|*[!A-Za-z0-9._-]*) return 2 ;;
+  esac
   if [ -n "${FM_PENDING_REPLY_DIR_OVERRIDE:-}" ]; then
     dir=$FM_PENDING_REPLY_DIR_OVERRIDE
   else
     state=$(dirname "${f:-}") || return 2
     dir="$state/pending-replies"
   fi
-  # Absence is only ever PROVEN by the owner's own retirement evidence: an expiry
-  # marker, or the retained audit copy it moves the record under. Anything else - no
-  # directory at all, no objects of any kind, a vanished record with no trace - reads
-  # as undecided, because inventing absence from silence is exactly how a real
-  # escalation gets hidden from the captain without anyone noticing.
-  case "$corr" in
-    ''|*[!A-Za-z0-9._-]*) return 2 ;;
-  esac
-  [ -L "$dir" ] && return 2
-  if [ ! -d "$dir" ]; then
-    # A relocated directory that was never created says nothing about any key.
-    [ -n "${FM_PENDING_REPLY_DIR_OVERRIDE:-}" ] && return 2
-    # The default location is created together with the records it holds, so a state
-    # directory that has one and never had the other proves nothing either: undecided.
-    [ -e "$dir" ] || return 2
-  fi
+  # A directory that cannot be examined proves nothing about any key inside it.
+  { [ -d "$dir" ] && [ ! -L "$dir" ]; } || return 2
   rec="$dir/$corr"
-  if [ -L "$rec" ]; then
-    return 2
-  elif [ -e "$rec" ]; then
+  # An object reached through a symlink is not the owner's record: undecided, never absent.
+  [ ! -L "$rec" ] || return 2
+  if [ -e "$rec" ]; then
     [ -f "$rec" ] && [ -r "$rec" ] || return 2
+    # A live record owns its decision whatever its phase, because closing it is published
+    # as a status line. Only the owner's own expiry evidence retires it: the marker it
+    # writes, or the `phase=expired` it sets before moving the record under expired/.
     if [ -e "$dir/.expired-$corr" ]; then
       [ -f "$dir/.expired-$corr" ] && [ ! -L "$dir/.expired-$corr" ] && return 1
       return 2
     fi
     phase=$(grep '^phase=' "$rec" 2>/dev/null | tail -1 | cut -d= -f2-)
-    case "$phase" in
-      expired) return 1 ;;
-      '') return 2 ;;
-    esac
+    [ "$phase" = expired ] && return 1
     return 0
   fi
-  # No live record object: look for the owner's retirement evidence instead.
+  # No live record object. Absence of retirement evidence here is NOT proof of absence:
+  # a key whose owning directory simply never held it, or whose record vanished with no
+  # marker and no audit copy, cannot be told apart from one whose files were lost. That
+  # reads as undecided so the decision stays open and visible, which is the safe side:
+  # inventing absence out of silence is how a real escalation gets hidden from the
+  # captain unnoticed. Proven absence requires the owner's own trail, checked next.
   if [ -e "$dir/.expired-$corr" ]; then
     [ -f "$dir/.expired-$corr" ] && [ ! -L "$dir/.expired-$corr" ] && return 1
     return 2
@@ -584,8 +578,6 @@ _fm_pending_reply_record_state() {  # <status-file> <decision-key> -> 0|1|2
     [ -f "$dir/expired/$corr" ] && [ ! -L "$dir/expired/$corr" ] && return 1
     return 2
   fi
-  # Nothing here ever owned this key, or it was deleted outside the owner's lifecycle.
-  # Either way the classifier cannot tell, so it must keep the decision open.
   return 2
 }
 
@@ -599,6 +591,20 @@ _fm_status_kind() {
     kind=${kind:-ship}
   fi
   case "$kind" in ship|scout|secondmate) printf '%s' "$kind" ;; *) printf unknown ;; esac
+}
+
+_fm_pending_reply_open_note() {  # <status-file> <key> <note>
+  local f=$1 key=$2 note=$3
+  case "$key" in
+    pending-reply-*) ;;
+    *) printf '%s' "$note"; return 0 ;;
+  esac
+  _fm_pending_reply_record_state "$f" "$key"
+  if [ $? -eq 2 ]; then
+    printf '%s [pending-reply-record-undecidable]' "$note"
+  else
+    printf '%s' "$note"
+  fi
 }
 
 _fm_decision_fold_line() {  # <open-set> <status-line> <resolve-verb> <held-verb> <kind> <status-file>
@@ -662,10 +668,7 @@ _fm_decision_fold_line() {  # <open-set> <status-line> <resolve-verb> <held-verb
         return 0
       fi
       note=$(status_line_note "$line")
-      if [ "$pr_state" -eq 2 ]; then
-        # Undecidable: keep it open, but say what could not be decided.
-        note="${note} [pending-reply-record-undecidable]"
-      fi
+      note=$(_fm_pending_reply_open_note "$f" "$key" "$note")
       open=$(_fm_decision_drop "$open" "$key")
       [ -n "$open" ] && open="${open}"$'\n'
       open="${open}${key}"$'\t'"${verb}"$'\t'"${note}"$'\n'
@@ -1888,6 +1891,12 @@ _fm_status_open_decision_origins() {  # <status-file> [<kind>]
     key=$(_fm_decision_key "$line") || { open=$after; continue; }
     verb=$(status_line_verb "$line")
     note=$(status_line_note "$line")
+    # The fold appends its own diagnostic to the note it stores whenever a
+    # pending-reply record could not be read, so compare the origin against that stored
+    # row rather than the raw line. A pending-reply decision kept open on an
+    # undecidable read is still exactly this line's origin; losing the match would make
+    # a blocked first-cycle signal look like it never opened at all.
+    note=$(_fm_pending_reply_open_note "$f" "$key" "$note")
     case "$verb" in
       needs-decision|blocked)
         if _fm_open_set_has "$after" "$key" \

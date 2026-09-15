@@ -334,3 +334,90 @@ seeds to those fixtures. I am not going to apply it while F2 is undecided, becau
 records into a fixture is exactly the shape of "editing the test to fit the implementation"
 you told me to avoid; and its sibling assertion in `fm-classify-corr-token` is about the
 namespace guard, which my change has nothing to do with. They stay unreplayed pending F2.
+
+### F2 implementation (ruled: open on vocabulary, retire on proven absence) — done
+All three required conditions are in place inside upstream's kind-aware fold:
+1. a `pending-reply-*` key opens on its own vocabulary with the record never gating entry,
+   and upstream's supersession order is untouched (terminal ship/scout lines still return first);
+2. proven record absence produces one explicit synthetic close inside the fold - the key is
+   dropped through an event rather than silently omitted, so a cleaned-up correlation stops
+   being captain-facing without disappearing unexplained;
+3. an undecidable read keeps the decision open and appends `[pending-reply-record-undecidable]`
+   to its note, once per episode, so "cannot tell" is never treated as "does not exist".
+
+Proven absence means the owner's own retirement trail only: its `.expired-<corr>` marker or
+the retained `expired/<corr>` audit copy, or `phase=expired` on the live record. A symlinked
+record, an unreadable object, and an unexaminable directory are all undecided, never absent.
+
+Acceptance counts, run for real at this tree:
+- `tests/fm-classify-decision-key.test.sh` (#3753's batch): **21 pass / 0 fail**
+- `tests/fm-wake-drain-open-decisions.test.sh`: **9 pass / 0 fail**
+- `tests/fm-classify-corr-token.test.sh`: **12 pass / 0 fail**
+- `tests/fm-pending-reply.test.sh`: 33 pass / **1 fail** — see the second ruling below.
+
+Two implementation facts worth recording because they cost time to find:
+- The diagnostic cannot ride on the note silently: `_fm_status_open_decision_origins()`
+  matches a line against the fold's stored row by exact string, so any annotation must be
+  produced by one shared helper called from both places, or a blocked first-cycle signal
+  stops being recognized as the decision's origin. That helper is
+  `_fm_pending_reply_open_note`.
+- Fold version 8 -> 9: a cursor persisted under 8 can hold a pending-reply decision whose
+  record was retired while nothing watched it, which is exactly the unclosable row this
+  change removes, so those cursors are discarded and rebuilt from byte 0.
+
+## Second ruling needed — what counts as proof that a record is gone
+`tests/fm-pending-reply.test.sh` still has one red case, and I am not widening my own rule
+to make it pass.
+
+The case creates a status line naming correlation `abcdef0123456789`, deletes the record
+with a bare `rm -f`, writes no expiry marker and no audit copy, then asserts
+`status_open_decisions` reports nothing. Under your condition 3 that input is precisely the
+case I must *not* retire: there is no retirement evidence, only silence, and reading silence
+as absence is how a real escalation gets hidden from the captain unnoticed. So the test wants
+"missing object ⇒ absent" while the ruling wants "missing object with no trail ⇒ undecided".
+
+Note the sibling case in the same suite passes: when the owning library expires a reply for
+real, it writes the marker and moves the record under `expired/`, and my rule closes that
+decision correctly. So D3(b)'s genuine symptom - a record retired through the owner's own
+lifecycle replaying forever - is fixed and covered by a green test.
+
+Options, with consequences:
+- **A (my recommendation):** keep the rule and treat this fixture as over-strict. Its `rm -f`
+  models a filesystem accident, not the owner retiring a decision; answering it by treating
+  absence as proof means every lost or unreadable record file silently hides a mate's real
+  escalation. Fix = narrow the fixture to create the marker the owner would have written,
+  which is a fact about the scenario, not a weakened assertion.
+- **B:** accept bare absence as proof. Then the orphan case goes green, but condition 3 loses
+  its meaning and silent suppression of legitimate escalations becomes reachable again.
+- **C:** split by context - absence proves retirement only when the state directory exists and
+  is readable, undecided otherwise. Fixes the case without full silence-as-proof, but adds a
+  third distinguishable state my helper does not model today.
+
+I stopped here rather than picking quietly, since this is the same class of decision as F2.
+
+### FM-018 final design (this section replaces every earlier description of it)
+A pending-reply decision's membership is decided at one point: inside the kind-aware fold,
+where its vocabulary opens the key, where proven retirement closes it as an explicit event,
+and where an undecidable read keeps it open and says so. No pass runs over a finished set, no
+ambient status-file global exists, and nothing in this repository references the earlier
+per-line guard or post-fold filter designs.
+
+### Ruling 8 — evidence source changed for one test, deliberately (cond: A + fix the test)
+`test_deleted_pending_record_does_not_replay_open_decision` was written by this card's own
+`1828b052` round, not by upstream #3753, so correcting it touches no upstream contract. It
+named a correlation in a status line, never created a record, never deleted one, and asserted
+the key stayed closed - that asserts option B ("no record means retired") while condition 3
+forbids exactly that inference. Kept the intent, replaced the evidence:
+- `test_retired_pending_record_does_not_replay_open_decision` now walks the owner's real
+  lifecycle - create, deliver, escalate, confirm, complete, then reclaim through
+  `fm_pending_reply_tick`, which publishes both the audit copy and the expiry marker - and
+  asserts the key is open while the record lives and closed after retirement. This also covers
+  the reclaim path the old fixture skipped.
+- `test_recordless_pending_key_stays_open_and_reports_undecidable` pins the opposite side so
+  today's misjudgement cannot return in a new shape: no record and no trail must stay visible
+  in OPEN DECISIONS and name its uncertainty, while a foreign note still cannot raise the key.
+
+Counts after this change, run for real: `fm-pending-reply` **43 pass / 0 fail** (the target of
+34 was met by adding the counter-case, not by dropping anything), `fm-classify-corr-token`
+**12/0**, `fm-classify-decision-key` (#3753's batch) **21/0**, `fm-wake-drain-open-decisions`
+**9/0**. No assertion in any upstream case was edited to reach these numbers.

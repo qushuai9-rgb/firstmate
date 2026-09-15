@@ -1205,28 +1205,50 @@ EOF
 # report. The live record moves under expired/ so it no longer owns an OPEN
 # DECISIONS key, while the original status history remains intact for audit.
 _fm_pending_reply_expire_escalated_locked() {  # <state-dir> <corr_id>
-  local state=$1 corr=$2 rec phase outcome completed grace now age expired_dir target
+  local state=$1 corr=$2 rec phase outcome completed grace now age expired_dir target marker expired_tmp
   rec=$(fm_pending_reply_path "$state" "$corr")
-  [ -f "$rec" ] || return 1
-  phase=$(fm_pending_reply_get "$rec" phase)
   expired_dir="$(fm_pending_reply_dir "$state")/expired"
   target="$expired_dir/$corr"
   marker=$(fm_pending_reply_expired_marker_path "$state" "$corr")
   mkdir -p "$expired_dir" || return 1
   [ ! -L "$target" ] || return 1
+  [ ! -L "$marker" ] || return 1
+
+  if [ ! -f "$rec" ]; then
+    [ -f "$target" ] || return 1
+    if [ ! -e "$marker" ]; then
+      now=$(fm_pending_reply_get "$target" expired_epoch)
+      [ -n "$now" ] || now=$(fm_pending_reply_now)
+      fm_pending_reply_write_expired_marker "$state" "$corr" "$now"
+    fi
+    return $?
+  fi
+  phase=$(fm_pending_reply_get "$rec" phase)
+
+  if [ -e "$target" ]; then
+    [ -f "$target" ] || return 1
+    [ "$(fm_pending_reply_get "$target" phase)" = expired ] || return 1
+    rm -f "$rec" || return 1
+    if [ ! -e "$marker" ]; then
+      now=$(fm_pending_reply_get "$target" expired_epoch)
+      [ -n "$now" ] || now=$(fm_pending_reply_now)
+      fm_pending_reply_write_expired_marker "$state" "$corr" "$now"
+    fi
+    return $?
+  fi
 
   if [ "$phase" = expired ]; then
     now=$(fm_pending_reply_now)
     [ -n "$(fm_pending_reply_get "$rec" expired_epoch)" ] ||
       fm_pending_reply_set "$rec" expired_epoch "$now" || return 1
-    fm_pending_reply_write_expired_marker "$state" "$corr" "$now" || return 1
     if [ -e "$target" ]; then
       [ -f "$target" ] || return 1
       rm -f "$rec" || return 1
     else
       mv "$rec" "$target" || return 1
     fi
-    return 0
+    [ -e "$marker" ] || fm_pending_reply_write_expired_marker "$state" "$corr" "$now"
+    return $?
   fi
 
   [ "$phase" = escalated ] || return 1
@@ -1241,10 +1263,14 @@ _fm_pending_reply_expire_escalated_locked() {  # <state-dir> <corr_id>
   [ "$age" -ge "$grace" ] || return 1
   [ ! -e "$target" ] || return 1
 
-  fm_pending_reply_write_expired_marker "$state" "$corr" "$now" || return 1
-  fm_pending_reply_set "$rec" phase expired || return 1
-  fm_pending_reply_set "$rec" expired_epoch "$now" || return 1
-  mv "$rec" "$target" || return 1
+  expired_tmp="$expired_dir/.${corr}.expired.tmp.$$"
+  [ ! -e "$expired_tmp" ] || return 1
+  cp "$rec" "$expired_tmp" || return 1
+  fm_pending_reply_set "$expired_tmp" phase expired || return 1
+  fm_pending_reply_set "$expired_tmp" expired_epoch "$now" || return 1
+  mv "$expired_tmp" "$target" || return 1
+  rm -f "$rec" || return 1
+  fm_pending_reply_write_expired_marker "$state" "$corr" "$now"
 }
 
 fm_pending_reply_expire_escalated() {  # <state-dir> <corr_id>
@@ -1509,11 +1535,21 @@ fm_pending_reply_tick_one() {  # <state-dir> <corr_id> <busy_state> [secondmate-
 # Never scrapes secondmate conversation; uses only parent status, backend busy
 # state, and optional secondmate-home wrong-home path checks.
 fm_pending_reply_tick() {  # <state-dir>
-  local state=$1 dir rec corr task_id phase delivered meta backend target label busy sm_home harness remote_host
+  local state=$1 dir rec corr task_id phase delivered meta backend target label busy sm_home harness remote_host expired_dir
   local observation observation_task found i
   local -a observation_tasks=() observation_values=()
   dir=$(fm_pending_reply_dir "$state")
   [ -d "$dir" ] || return 0
+  expired_dir="$dir/expired"
+  for rec in "$expired_dir"/*; do
+    [ -f "$rec" ] || continue
+    case "$(basename "$rec")" in
+      .*) continue ;;
+    esac
+    corr=$(fm_pending_reply_get "$rec" corr_id)
+    [ -n "$corr" ] || corr=$(basename "$rec")
+    fm_pending_reply_expire_escalated "$state" "$corr" || true
+  done
   for rec in "$dir"/*; do
     [ -f "$rec" ] || continue
     case "$(basename "$rec")" in

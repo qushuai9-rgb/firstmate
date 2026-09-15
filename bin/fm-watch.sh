@@ -756,8 +756,13 @@ recorded_windows() {
 # observation: the receiving home owns acknowledgement and this parent never
 # changes the row or the foreign queue.
 secondmate_declared_idle() {  # <secondmate-home> <task-id>
-  local home=$1 task=$2 status last verb note
-  status="$home/state/$task.status"
+  local home=$1 task=$2 status child_status last verb note
+  child_status="$home/state/$task.status"
+  if [ -f "$child_status" ]; then
+    status=$child_status
+  else
+    status="$STATE/$task.status"
+  fi
   [ -f "$status" ] || return 1
   last=$(awk 'NF { line=$0 } END { print line }' "$status" 2>/dev/null)
   verb=$(status_line_verb "$last")

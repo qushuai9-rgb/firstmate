@@ -1544,6 +1544,38 @@ test_expired_phase_residue_is_reclaimed_on_tick() {
   pass "a phase=expired residue is self-healed by the next pending-reply tick"
 }
 
+test_expiry_recovers_when_marker_publish_is_interrupted() {
+  (
+    local home state corr rec expired_dir marker open
+    home=$(setup_parent expiry-marker-interrupt)
+    state="$home/state"
+    export FM_PENDING_REPLY_NOW=10300
+    corr=$(fm_pending_reply_create "$home" "$state" hibit "marker interruption")
+    rec=$(fm_pending_reply_path "$state" "$corr")
+    fm_pending_reply_mark_delivered "$state" "$corr" || fail "delivery setup failed"
+    fm_pending_reply_set "$rec" phase escalated || fail "escalation setup failed"
+    fm_pending_reply_set "$rec" recovery_delivery_outcome confirmed || fail "outcome setup failed"
+    fm_pending_reply_set "$rec" recovery_turn_completed_epoch 10300 || fail "completion setup failed"
+    printf 'blocked [key=pending-reply-%s]: pending-reply-missed: task=hibit pending-reply-id=%s request=marker interruption\n' \
+      "$corr" "$corr" > "$state/hibit.status"
+    export FM_PENDING_REPLY_NOW=10400
+    expired_dir="$(fm_pending_reply_dir "$state")/expired"
+    marker=$(fm_pending_reply_expired_marker_path "$state" "$corr")
+    saved_marker_writer=$(declare -f fm_pending_reply_write_expired_marker)
+    fm_pending_reply_write_expired_marker() { return 1; }
+    fm_pending_reply_tick "$state" || fail "tick should tolerate an interrupted marker publish"
+    eval "$saved_marker_writer"
+    [ ! -f "$rec" ] || fail "interrupted expiry left an owner in pending-replies"
+    [ -f "$expired_dir/$corr" ] || fail "interrupted expiry lost the audit record"
+    open=$(status_open_decisions "$state/hibit.status")
+    [ -z "$open" ] || fail "an ownerless expired record kept an OPEN DECISIONS row: $open"
+    [ ! -e "$marker" ] || fail "the interrupted marker unexpectedly published"
+    fm_pending_reply_tick "$state" || fail "the next tick should repair the missing marker"
+    [ -f "$marker" ] || fail "the next tick did not repair the missing expiry marker"
+  ) || fail "expiry marker interruption regression failed"
+  pass "expiry remains ownerless and self-heals after marker publication interruption"
+}
+
 test_deleted_pending_record_does_not_replay_open_decision() {
   local home state corr status
   home=$(setup_parent deleted-record-fold)
@@ -1653,7 +1685,9 @@ test_tick_end_to_end_missed_then_escalate
 test_failed_send_discards_undelivered_expectation
 test_confirmed_escalated_reply_expires_after_grace
 test_expired_phase_residue_is_reclaimed_on_tick
-test_deleted_pending_record_does_not_replay_open_decision
+test_expiry_recovers_when_marker_publish_is_interrupted
+test_retired_pending_record_does_not_replay_open_decision
+test_recordless_pending_key_stays_open_and_reports_undecidable
 test_remote_repost_waits_for_the_reply_channel
 test_mirrored_remote_reply_never_triggers_a_repost
 test_same_basename_self_home_corr_resolves_on_tick

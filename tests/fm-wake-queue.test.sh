@@ -257,6 +257,18 @@ test_secondmate_empty_or_declared_idle_queue_stays_silent() {
       bash -c '. "$1"; secondmate_wake_stall_tick' _ "$ROOT/bin/fm-watch.sh")
     [ -z "$out" ] || fail "a keyed explicitly idle secondmate produced a stall notification: $idle_line -> $out"
   done
+  rm -f "$sub/state/mate.status"
+  printf 'paused [key=work-slug] [corr=0123456789abcdef]: 按指令 idle\n' > "$state/mate.status"
+  out=$(FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
+    bash -c '. "$1"; secondmate_wake_stall_tick' _ "$ROOT/bin/fm-watch.sh")
+  [ -z "$out" ] || fail "a parent-channel idle declaration produced a stall notification: $out"
+  expected=$(FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
+    bash -c '. "$1"; secondmate_no_expected_work "$2" mate && printf yes' _ "$ROOT/bin/fm-watch.sh" "$sub")
+  [ "$expected" = yes ] || fail "the idle-lapse no-expected-work guard ignored the parent-channel declaration"
+  printf 'self_continue=1\n' >> "$state/mate.meta"
+  out=$(FM_SECONDMATE_IDLE_LAPSE_SECS=1 FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
+    bash -c '. "$1"; secondmate_idle_lapse_tick' _ "$ROOT/bin/fm-watch.sh")
+  [ -z "$out" ] || fail "a parent-channel idle declaration produced an idle-lapse notification: $out"
   pass "empty and explicitly idle secondmate queues suppress wake-loop stall noise"
 }
 
