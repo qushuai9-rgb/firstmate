@@ -783,6 +783,12 @@ secondmate_oldest_queue_row() {  # <queue-path>
   ' "$queue" 2>/dev/null || true
 }
 
+secondmate_no_expected_work() {  # <secondmate-home> <task-id>
+  local home=$1 task=$2
+  [ -z "$(secondmate_oldest_queue_row "$home/state/.wake-queue")" ] \
+    || secondmate_declared_idle "$home" "$task"
+}
+
 # 0 iff <task> is demonstrably inside an active turn, through the watcher's own
 # busy-state knowledge: an exact busy verdict from the semantic contract, bounded
 # by the same BUSY_TURN_MAX_SECS that stops a busy pane from proving liveness
@@ -843,7 +849,7 @@ secondmate_wake_stall_tick() {
     # An empty queue or an explicit idle declaration means there is no
     # expected self-driven work for this mate. The endpoint is healthy and the
     # queue-loop alarm must wait for a new routed row before timing progress.
-    if [ -z "$row" ] || secondmate_declared_idle "$home" "$task"; then
+    if secondmate_no_expected_work "$home" "$task"; then
       rm -f "$marker" "$progress_marker"
       if [ -e "$receipt_dir" ] || [ -L "$receipt_dir" ]; then
         [ -d "$receipt_dir" ] && [ ! -L "$receipt_dir" ] || return 1
@@ -1077,6 +1083,7 @@ secondmate_idle_lapse_tick() {
     [ "$(secondmate_self_continue_effective "$meta" "$home")" = 1 ] || continue
     [ -f "$home/.fm-secondmate-home" ] && [ ! -L "$home/.fm-secondmate-home" ] || continue
     [ "$(cat "$home/.fm-secondmate-home" 2>/dev/null || true)" = "$task" ] || continue
+    secondmate_no_expected_work "$home" "$task" && continue
     win=$(fm_backend_target_of_meta "$meta")
     [ -n "$win" ] || continue
     anchor="$STATE/.secondmate-idle-anchor-$task"

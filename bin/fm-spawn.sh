@@ -739,7 +739,7 @@ fi
 spawn_remote_secondmate() {
   local id=$1 remote host root home harness positional model effort backend out rc meta tmp
   local remote_backend remote_target remote_harness remote_herdr_session registry_lock remote_lock remote_generation
-  local remote_traceparent remote_recorded_traceparent sm_primary_head sync_out sync_rc
+  local remote_traceparent remote_recorded_traceparent parent_self_continue sm_primary_head sync_out sync_rc
   local -a launch_args
   id=${POS[0]:-}
   fm_task_id_creation_valid "$id" || {
@@ -921,7 +921,12 @@ spawn_remote_secondmate() {
   if [ "$(fm_trace_context_session_effective "$STATE/.trace-context-effective")" = on ]; then
     remote_traceparent=$(FM_TRACE_CONTEXT=on fm_trace_context_resolve "$CONFIG" "$meta" || true)
   fi
-  launch_args=("$id" "$harness" "$model" "$effort" "$backend")
+  parent_self_continue=$(fm_meta_get "$meta" self_continue)
+  case "$parent_self_continue" in
+    0|1) ;;
+    *) parent_self_continue=- ;;
+  esac
+  launch_args=("$id" "$harness" "$model" "$effort" "$backend" "$parent_self_continue")
   [ -z "$remote_traceparent" ] || launch_args+=("$remote_traceparent")
   if out=$("$SCRIPT_DIR/fm-on.sh" "$id" fm-remote-secondmate-control.sh launch \
     "${launch_args[@]}" </dev/null 2>&1); then
@@ -943,7 +948,15 @@ spawn_remote_secondmate() {
   remote_target=$(printf '%s\n' "$out" | sed -n 's/^target=//p' | tail -1)
   remote_harness=$(printf '%s\n' "$out" | sed -n 's/^harness=//p' | tail -1)
   remote_self_continue=$(printf '%s\n' "$out" | sed -n 's/^self_continue=//p' | tail -1)
-  case "$remote_self_continue" in 0|1) ;; *) remote_self_continue=0 ;; esac
+  case "$remote_self_continue" in
+    0|1) ;;
+    *)
+      case "$parent_self_continue" in
+        0|1) remote_self_continue=$parent_self_continue ;;
+        *) remote_self_continue=0 ;;
+      esac
+      ;;
+  esac
   remote_herdr_session=$(printf '%s\n' "$out" | sed -n 's/^herdr_session=//p' | tail -1)
   if [ "$remote_backend" != herdr ]; then
     fm_lock_release "$remote_lock" || true
@@ -2527,7 +2540,9 @@ if [ "$KIND" = secondmate ]; then
   else
     BRIEF="$DATA/$ID/brief.md"
   fi
-  if [ "$RELAUNCH" -eq 1 ]; then
+  if [ "${FM_SECONDMATE_SELF_CONTINUE_POLICY:-}" = 0 ] || [ "${FM_SECONDMATE_SELF_CONTINUE_POLICY:-}" = 1 ]; then
+    SECONDMATE_SELF_CONTINUE=$FM_SECONDMATE_SELF_CONTINUE_POLICY
+  elif [ "$RELAUNCH" -eq 1 ]; then
     # A valid durable value belongs to the existing secondmate incarnation and
     # must survive replacement even if the charter was edited while it was
     # stopped. Only an absent or malformed legacy field is backfilled from the

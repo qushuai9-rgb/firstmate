@@ -2,8 +2,8 @@
 # Host-local lifecycle control for the remote secondmate home selected by fm-on.
 #
 # Usage:
-#   fm-remote-secondmate-control.sh launch <id> <harness> <model|-> <effort|-> herdr [traceparent]
-#   fm-remote-secondmate-control.sh relaunch <id> <harness> <model|default|-> <effort|default|->
+#   fm-remote-secondmate-control.sh launch <id> <harness> <model|-> <effort|-> herdr [self_continue|-] [traceparent]
+#   fm-remote-secondmate-control.sh relaunch <id> <harness> <model|default|-> <effort|default|-> [self_continue|-]
 #   fm-remote-secondmate-control.sh state <id>
 #   fm-remote-secondmate-control.sh route <id>
 #   fm-remote-secondmate-control.sh send <id> <message> [fire-and-forget]
@@ -61,6 +61,12 @@ REMOTE_HERDR_SESSION=fm-remote
 . "$SCRIPT_DIR/fm-backend.sh"
 # shellcheck source=bin/fm-ff-lib.sh
 . "$SCRIPT_DIR/fm-ff-lib.sh"
+# shellcheck source=bin/fm-tasks-axi-lib.sh
+. "$SCRIPT_DIR/fm-tasks-axi-lib.sh"
+# shellcheck source=bin/fm-wake-lib.sh
+. "$SCRIPT_DIR/fm-wake-lib.sh"
+# shellcheck source=bin/fm-backlog-transition-lib.sh
+. "$SCRIPT_DIR/fm-backlog-transition-lib.sh"
 # shellcheck source=bin/fm-pending-reply-lib.sh
 . "$SCRIPT_DIR/fm-pending-reply-lib.sh"
 # shellcheck source=bin/fm-task-inbox-lib.sh
@@ -127,6 +133,26 @@ state_value() { # <id>; prints recovery-grade state
   fm_backend_agent_state "$REMOTE_ENDPOINT_BACKEND" "$REMOTE_ENDPOINT_TARGET" 2>/dev/null || printf 'unreadable\n'
 }
 
+remote_endpoint_set_self_continue() { # <id> <0|1>
+  local id=$1 value=$2 meta lock tmp
+  case "$value" in 0|1) ;; *) return 1 ;; esac
+  meta=$(meta_path "$id")
+  lock=$(fm_meta_lock_path "$meta") || return 1
+  fm_lock_acquire_wait "$lock" || return 1
+  tmp="$CONTROL_STATE/.$id.meta.self-continue.${BASHPID:-$$}"
+  if ! awk -F= -v value="$value" '
+    $1 != "self_continue" { print }
+    END { print "self_continue=" value }
+  ' "$meta" >"$tmp" ||
+    ! fm_backlog_atomic_transition publish "$tmp" "$meta" "remote secondmate endpoint metadata" "$CONTROL_STATE"; then
+    rm -f "$tmp"
+    fm_lock_release "$lock" || true
+    return 1
+  fi
+  rm -f "$tmp"
+  fm_lock_release "$lock" || return 1
+}
+
 print_route() { # <id>
   local id=$1 harness traceparent self_continue
   remote_endpoint_require "$id"
@@ -154,8 +180,12 @@ cmd_route() {
 }
 
 cmd_launch() {
-  local id=$1 harness=$2 model=$3 effort=$4 selected_backend=$5 traceparent=${6:-}
-  local current meta out herdr_session
+  local id=$1 harness=$2 model=$3 effort=$4 selected_backend=$5 requested_self_continue=${6:-} traceparent=${7:-}
+  local current meta out herdr_session self_continue
+  if [ "$requested_self_continue" != 0 ] && [ "$requested_self_continue" != 1 ] && [ "$requested_self_continue" != - ] && [ -z "$traceparent" ]; then
+    traceparent=$requested_self_continue
+    requested_self_continue=-
+  fi
 
   validate_id "$id"
   validate_home "$id"
@@ -173,11 +203,28 @@ cmd_launch() {
   case "$selected_backend" in herdr) ;; *) die "a remote secondmate runs only on the herdr backend, not '$selected_backend'" ;; esac
   mkdir -p "$CONTROL_STATE" "$CONTROL_DATA"
   meta=$(meta_path "$id")
+  case "$requested_self_continue" in
+    0|1) self_continue=$requested_self_continue ;;
+    *)
+      self_continue=$(fm_meta_get "$meta" self_continue)
+      case "$self_continue" in
+        0|1) ;;
+        *)
+          if [ -f "$TARGET_HOME/data/charter.md" ] && grep '^Self-continuation: enabled$' "$TARGET_HOME/data/charter.md" >/dev/null 2>&1; then
+            self_continue=1
+          else
+            self_continue=0
+          fi
+          ;;
+      esac
+      ;;
+  esac
   if [ -f "$meta" ]; then
     remote_endpoint_require "$id"
     current=$(fm_backend_agent_state "$REMOTE_ENDPOINT_BACKEND" "$REMOTE_ENDPOINT_TARGET" 2>/dev/null || printf 'unreadable\n')
     case "$current" in
       alive)
+        remote_endpoint_set_self_continue "$id" "$self_continue" || die "could not reconcile remote secondmate self-continuation policy"
         print_route "$id"
         return 0
         ;;
@@ -199,7 +246,8 @@ cmd_launch() {
   [ -z "$traceparent" ] || ARGS+=(--traceparent "$traceparent")
   if ! out=$(HERDR_SESSION="$REMOTE_HERDR_SESSION" FM_HOME="$FM_ROOT" FM_ROOT_OVERRIDE="$FM_ROOT" \
     FM_STATE_OVERRIDE="$CONTROL_STATE" FM_DATA_OVERRIDE="$CONTROL_DATA" \
-    FM_CONFIG_OVERRIDE="$TARGET_HOME/config" FM_SKIP_SECONDMATE_INHERIT=1 \
+    FM_CONFIG_OVERRIDE="$TARGET_HOME/config" FM_SECONDMATE_SELF_CONTINUE_POLICY="$self_continue" \
+    FM_SKIP_SECONDMATE_INHERIT=1 \
     FM_SKIP_SECONDMATE_SYNC=1 \
     "$SCRIPT_DIR/fm-spawn.sh" "${ARGS[@]}" 2>&1); then
     [ -z "$out" ] || printf '%s\n' "$out" >&2
@@ -209,6 +257,8 @@ cmd_launch() {
   herdr_session=$(fm_meta_get "$meta" herdr_session)
   [ "$herdr_session" = "$REMOTE_HERDR_SESSION" ] \
     || die "remote launch recorded Herdr session '${herdr_session:-missing}', expected '$REMOTE_HERDR_SESSION'"
+  remote_endpoint_set_self_continue "$id" "$self_continue" \
+    || die "could not publish remote secondmate self-continuation policy"
   print_route "$id"
 }
 
@@ -226,11 +276,25 @@ cmd_launch() {
 # re-resolve it here would silently drift the mate onto another runtime. `default`
 # explicitly clears an absent parent pin; `-` remains its compatibility spelling.
 cmd_relaunch() {
-  local id=$1 harness=$2 model=$3 effort=$4
+  local id=$1 harness=$2 model=$3 effort=$4 requested_self_continue=${5:-}
   local -a control_args
 
   validate_id "$id"
   validate_home "$id"
+  case "$requested_self_continue" in
+    0|1) ;;
+    *) requested_self_continue=$(fm_meta_get "$(meta_path "$id")" self_continue) ;;
+  esac
+  case "$requested_self_continue" in
+    0|1) ;;
+    *)
+      if [ -f "$TARGET_HOME/data/charter.md" ] && grep '^Self-continuation: enabled$' "$TARGET_HOME/data/charter.md" >/dev/null 2>&1; then
+        requested_self_continue=1
+      else
+        requested_self_continue=0
+      fi
+      ;;
+  esac
   case "$harness" in
     claude|codex|opencode|pi|pi-signed|grok|kimi|cursor) ;;
     *) die "unverified remote secondmate harness: $harness" ;;
@@ -248,11 +312,13 @@ cmd_relaunch() {
   # the dedicated fm-remote session, and the parent already owns both convergence
   # legs, so the host-local spawn must not re-sync or re-inherit against this
   # host's own Firstmate copy.
+  FM_SECONDMATE_SELF_CONTINUE_POLICY="$requested_self_continue" \
   HERDR_SESSION="$REMOTE_HERDR_SESSION" FM_HOME="$FM_ROOT" FM_ROOT_OVERRIDE="$FM_ROOT" \
     FM_STATE_OVERRIDE="$CONTROL_STATE" FM_DATA_OVERRIDE="$CONTROL_DATA" \
     FM_CONFIG_OVERRIDE="$TARGET_HOME/config" FM_SKIP_SECONDMATE_INHERIT=1 \
     FM_SKIP_SECONDMATE_SYNC=1 \
     "$SCRIPT_DIR/fm-control.sh" "${control_args[@]}"
+  printf 'self_continue=%s\n' "$requested_self_continue"
 }
 
 cmd_send() {
@@ -422,8 +488,8 @@ cmd_retire() {
 }
 
 case "${1:-}" in
-  launch) shift; [ "$#" -ge 5 ] && [ "$#" -le 6 ] || usage; cmd_launch "$@" ;;
-  relaunch) shift; [ "$#" -eq 4 ] || usage; cmd_relaunch "$@" ;;
+  launch) shift; [ "$#" -ge 5 ] && [ "$#" -le 7 ] || usage; cmd_launch "$@" ;;
+  relaunch) shift; [ "$#" -ge 4 ] && [ "$#" -le 5 ] || usage; cmd_relaunch "$@" ;;
   state) shift; [ "$#" -eq 1 ] || usage; validate_id "$1"; validate_home "$1"; state_value "$1" ;;
   route) shift; [ "$#" -eq 1 ] || usage; cmd_route "$1" ;;
   send) shift; [ "$#" -ge 2 ] && [ "$#" -le 3 ] || usage; cmd_send "$@" ;;

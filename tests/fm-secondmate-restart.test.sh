@@ -479,6 +479,7 @@ case "${rargs[1]:-}" in
         ;;
     esac
     printf 'relaunched %s\n' "${rargs[2]}"
+    case "${rargs[6]:-0}" in 0|1) printf 'self_continue=%s\n' "${rargs[6]}" ;; *) printf 'self_continue=0\n' ;; esac
     ;;
 esac
 exit 0
@@ -498,6 +499,7 @@ test_remote_mate_restarts_over_the_transport_hop() {
   # The parent's own pin is what the replacement must run on; the remote home's
   # copy of config/secondmate-harness is a different home's file.
   printf 'codex big-model high\n' > "$dir/home/config/secondmate-harness"
+  printf 'self_continue=1\n' >> "$dir/home/state/sm2.meta"
 
   out=$(run_restart "$dir" fm-sm2); rc=$?
   unset FM_FAKE_ANSWER_STATUS
@@ -507,8 +509,10 @@ test_remote_mate_restarts_over_the_transport_hop() {
     "a remote restart should be reported with its host and the parent's pinned runtime"
   relaunch_line=$(grep '^fm-remote-secondmate-control.sh relaunch' "$dir/ssh.log" | head -1)
   [ -n "$relaunch_line" ] || fail "no relaunch crossed the transport hop"$'\n'"$(cat "$dir/ssh.log")"
-  [ "$relaunch_line" = "fm-remote-secondmate-control.sh relaunch sm2 codex big-model high" ] \
+  [ "$relaunch_line" = "fm-remote-secondmate-control.sh relaunch sm2 codex big-model high 1" ] \
     || fail "the host-local relaunch did not carry the parent's resolved profile: $relaunch_line"
+  [ "$(sed -n 's/^self_continue=//p' "$dir/home/state/sm2.meta" | tail -1)" = 1 ] \
+    || fail "the parent record lost self_continue after the remote relaunch"
   # The persist request crossed the SAME hop before the restart did.
   [ "$(grep -n '^fm-remote-secondmate-control.sh send' "$dir/ssh.log" | head -1 | cut -d: -f1)" \
      -lt "$(grep -n '^fm-remote-secondmate-control.sh relaunch' "$dir/ssh.log" | head -1 | cut -d: -f1)" ] \
@@ -573,7 +577,7 @@ test_native_ultra_restart_keeps_local_and_remote_profiles() {
   unset FM_FAKE_ANSWER_STATUS
   expect_code 0 "$rc" "native remote restart failed: $out"
   relaunch_line=$(grep '^fm-remote-secondmate-control.sh relaunch' "$dir/ssh.log" | head -1)
-  [ "$relaunch_line" = "fm-remote-secondmate-control.sh relaunch sm2 pi-signed codex-native/gpt-6-astra ultra" ] \
+  [ "$relaunch_line" = "fm-remote-secondmate-control.sh relaunch sm2 pi-signed codex-native/gpt-6-astra ultra -" ] \
     || fail "remote restart dropped native profile: $relaunch_line"
   pass "native Ultra survives local restart and the remote restart transport"
 }
@@ -668,7 +672,7 @@ test_relaunches_do_not_block_persist_polling() {
     "the slow first relaunch blocked lifecycle progress for the second mate"
   assert_contains "$out" "summary: 2 of 2 restarted, 0 nudged, 0 unreached" \
     "parallel relaunches were not both accounted for"
-  assert_grep 'fm-remote-secondmate-control.sh relaunch sm1 claude default default' "$dir/ssh.log" \
+  assert_grep 'fm-remote-secondmate-control.sh relaunch sm1 claude default default -' "$dir/ssh.log" \
     "an absent remote model and effort pin were not expressed as explicit defaults"
   pass "T12 relaunch waits do not block fleet persistence polling"
 }

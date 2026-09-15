@@ -87,6 +87,12 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 
 # shellcheck source=bin/fm-secondmate-restart-lib.sh
 . "$SCRIPT_DIR/fm-secondmate-restart-lib.sh"
+# shellcheck source=bin/fm-tasks-axi-lib.sh
+. "$SCRIPT_DIR/fm-tasks-axi-lib.sh"
+# shellcheck source=bin/fm-wake-lib.sh
+. "$SCRIPT_DIR/fm-wake-lib.sh"
+# shellcheck source=bin/fm-backlog-transition-lib.sh
+. "$SCRIPT_DIR/fm-backlog-transition-lib.sh"
 # shellcheck source=bin/fm-secondmate-nudge-lib.sh
 . "$SCRIPT_DIR/fm-secondmate-nudge-lib.sh"
 # shellcheck source=bin/fm-pending-reply-lib.sh
@@ -160,12 +166,18 @@ report_unreached() {  # <id> <reason>
 }
 
 restart_mate() {  # <array-index>
-  local i=$1 id restart_out restart_rc restart_reason ran_on
+  local i=$1 id restart_out restart_rc restart_reason ran_on self_continue meta lock tmp
   id=${IDS[$i]}
+  meta="$STATE/$id.meta"
+  self_continue=$(fm_meta_get "$meta" self_continue)
+  case "$self_continue" in
+    0|1) ;;
+    *) self_continue=- ;;
+  esac
   if [ "${PLACEMENT[i]}" = remote ]; then
     restart_out=$(FM_HOME="$FM_HOME" "$SCRIPT_DIR/fm-on.sh" "$id" \
       fm-remote-secondmate-control.sh relaunch \
-      "$id" "${HARNESS[i]}" "${MODEL[i]:-default}" "${EFFORT[i]:-default}" < /dev/null 2>&1)
+      "$id" "${HARNESS[i]}" "${MODEL[i]:-default}" "${EFFORT[i]:-default}" "$self_continue" < /dev/null 2>&1)
     restart_rc=$?
   else
     restart_out=$(FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" \
@@ -173,6 +185,26 @@ restart_mate() {  # <array-index>
     restart_rc=$?
   fi
   if [ "$restart_rc" -eq 0 ]; then
+    if [ "${PLACEMENT[i]}" = remote ]; then
+      self_continue=$(printf '%s\n' "$restart_out" | sed -n 's/^self_continue=//p' | tail -1)
+      case "$self_continue" in
+        0|1)
+          lock=$(fm_meta_lock_path "$meta") || { report_unreached "$id" "remote relaunch succeeded but its self-continuation policy could not be locked"; return; }
+          fm_lock_acquire_wait "$lock" || { report_unreached "$id" "remote relaunch succeeded but its self-continuation policy could not be locked"; return; }
+          tmp="$STATE/.$id.meta.self-continue.${BASHPID:-$$}"
+          if ! awk -F= -v value="$self_continue" '$1 != "self_continue" { print } END { print "self_continue=" value }' "$meta" > "$tmp" \
+            || ! fm_backlog_atomic_transition publish "$tmp" "$meta" "task record" "$STATE"; then
+            rm -f "$tmp"
+            fm_lock_release "$lock" || true
+            report_unreached "$id" "remote relaunch succeeded but its parent self-continuation policy could not be published"
+            return
+          fi
+          rm -f "$tmp"
+          fm_lock_release "$lock" || { report_unreached "$id" "remote relaunch succeeded but its parent self-continuation lock could not be released"; return; }
+          ;;
+        *) report_unreached "$id" "remote relaunch succeeded without a valid self-continuation policy"; return ;;
+      esac
+    fi
     ran_on=$(printf '%s\n' "$restart_out" | sed -n 's/^relaunched .* harness=\([^ ]*\).*/\1/p' | tail -1)
     [ -n "$ran_on" ] || ran_on=${HARNESS[i]}
     if [ "${PLACEMENT[i]}" = remote ]; then

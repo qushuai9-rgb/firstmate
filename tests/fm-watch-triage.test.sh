@@ -3694,6 +3694,7 @@ test_secondmate_idle_lapse_requires_self_continue_and_done() {
   printf 'window=%s\nkind=secondmate\nharness=pi\nhome=%s\nself_continue=1\n' "$window" "$home" > "$state/mate.meta"
   printf 'done: exp-038 complete\n' > "$state/mate.status"
   set_mtime "$(( $(date +%s) - 10 ))" "$state/mate.status"
+  printf '100\t1\tcheck\trouted\tcheck: continue\n' > "$home/state/.wake-queue"
   out=$(FM_SECONDMATE_IDLE_LAPSE_SECS=1 run_watch_tick "$state" "$fakebin" "$capture" secondmate_idle_lapse_tick)
   assert_contains "$out" 'idle lapse' "self-continuing done lapse did not alert"
   grep -v '^self_continue=1$' "$state/mate.meta" > "$state/mate.meta.tmp"
@@ -3701,7 +3702,17 @@ test_secondmate_idle_lapse_requires_self_continue_and_done() {
   rm -f "$state/.secondmate-idle-alerted-mate"
   out=$(FM_SECONDMATE_IDLE_LAPSE_SECS=1 run_watch_tick "$state" "$fakebin" "$capture" secondmate_idle_lapse_tick)
   [ -z "$out" ] || fail "idle lapse alerted without self_continue=1: $out"
-  pass "idle lapse requires the self_continue=1 metadata opt-in and a terminal done status"
+  : > "$home/state/.wake-queue"
+  printf 'done: exp-038 complete\n' > "$state/mate.status"
+  set_mtime "$(( $(date +%s) - 10 ))" "$state/mate.status"
+  printf 'self_continue=1\n' >> "$state/mate.meta"
+  out=$(FM_SECONDMATE_IDLE_LAPSE_SECS=1 run_watch_tick "$state" "$fakebin" "$capture" secondmate_idle_lapse_tick)
+  [ -z "$out" ] || fail "idle lapse alerted with no expected self-driven work: $out"
+  printf 'idle: 按指令 idle\n' > "$state/mate.status"
+  printf '100\t2\tcheck\trouted\tcheck: continue\n' > "$home/state/.wake-queue"
+  out=$(FM_SECONDMATE_IDLE_LAPSE_SECS=1 run_watch_tick "$state" "$fakebin" "$capture" secondmate_idle_lapse_tick)
+  [ -z "$out" ] || fail "idle lapse alerted after an explicit idle declaration: $out"
+  pass "idle lapse requires continuation policy, expected work, and a terminal done status"
 }
 
 # A product write after the terminal done line is continuation for one window
@@ -3717,6 +3728,7 @@ test_secondmate_idle_lapse_stale_output_cannot_mask_later_silence() {
   printf 'idle\n' > "$capture"
   printf 'window=%s\nkind=secondmate\nharness=pi\nhome=%s\nself_continue=1\n' "$window" "$home" > "$state/mate.meta"
   printf 'done [corr=0123456789abcdef]: exp-038 complete\n' > "$state/mate.status"
+  printf '100\t1\tcheck\trouted\tcheck: continue\n' > "$home/state/.wake-queue"
   now=$(date +%s)
   set_mtime "$(( now - 10 ))" "$state/mate.status"
   # A write after the done line is continuation for the current window...
@@ -3768,6 +3780,7 @@ test_secondmate_idle_lapse_reconciles_charter_for_pre_existing_meta() {
   out=$(FM_SECONDMATE_IDLE_LAPSE_SECS=1 run_watch_tick "$state" "$fakebin" "$capture" secondmate_idle_lapse_tick)
   [ -z "$out" ] || fail "a pre-existing mate with no charter was escalated as an idle lapse: $out"
   printf 'Self-continuation: enabled\n' > "$home/data/charter.md"
+  printf '100\t1\tcheck\trouted\tcheck: continue\n' > "$home/state/.wake-queue"
   set_mtime "$(( $(date +%s) - 60 ))" "$home/data/charter.md"
   out=$(FM_SECONDMATE_IDLE_LAPSE_SECS=1 run_watch_tick "$state" "$fakebin" "$capture" secondmate_idle_lapse_tick)
   assert_contains "$out" 'idle lapse' "a charter-enabled pre-existing mate's done lapse did not alert"
