@@ -2810,7 +2810,7 @@ EOF
 }
 
 test_secondmate_charter_brief_is_idle_by_default() {
-  local home brief
+  local home brief parent status_file report_rc
   home="$TMP_ROOT/idle-charter-home"
   mkdir -p "$home/data" "$home/state"
   scaffold_secondmate_charter "$home" idle-sm 'feature work for alpha' alpha
@@ -2819,8 +2819,22 @@ test_secondmate_charter_brief_is_idle_by_default() {
   # Idle contract: waits for routed work, never self-initiates.
   grep -F 'Self-continuation: disabled' "$brief" >/dev/null \
     || fail "charter brief did not record the default disabled self-continuation policy"
-  grep -F 'provider or upstream error aborts a task' "$brief" >/dev/null \
-    || fail "charter brief does not require a blocked/failed status for provider errors"
+  parent="$TMP_ROOT/provider-report-parent"
+  mkdir -p "$parent/state"
+  printf 'mate\n' > "$home/.fm-secondmate-home"
+  cat > "$home/.fm-secondmate-parent" <<EOF
+schema=fm-secondmate-parent.v1
+route=local
+parent_home=$parent
+EOF
+  FM_HOME="$home" "$ROOT/bin/fm-secondmate-report.sh" blocked \
+    0123456789abcdef 'provider request failed' >/dev/null 2>&1; report_rc=$?
+  expect_code 0 "$report_rc" "provider-error reporting path should publish a blocked status"
+  status_file="$parent/state/mate.status"
+  assert_present "$status_file" "provider-error reporting path did not create the parent status output"
+  assert_contains "$(cat "$status_file")" \
+    'blocked [corr=0123456789abcdef]: provider request failed' \
+    "provider-error reporting path did not publish a blocked status"
   grep -F 'go idle and wait silently for the main firstmate' "$brief" >/dev/null \
     || fail "charter brief does not tell the secondmate to go idle and wait for routed work"
   grep -F 'Act only on tasks the main firstmate routes to you' "$brief" >/dev/null \

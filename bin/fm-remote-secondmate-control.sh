@@ -133,6 +133,14 @@ state_value() { # <id>; prints recovery-grade state
   fm_backend_agent_state "$REMOTE_ENDPOINT_BACKEND" "$REMOTE_ENDPOINT_TARGET" 2>/dev/null || printf 'unreadable\n'
 }
 
+remote_endpoint_charter_self_continue() {
+  if [ -f "$TARGET_HOME/data/charter.md" ] && grep '^Self-continuation: enabled$' "$TARGET_HOME/data/charter.md" >/dev/null 2>&1; then
+    printf '1'
+  else
+    printf '0'
+  fi
+}
+
 remote_endpoint_set_self_continue() { # <id> <0|1>
   local id=$1 value=$2 meta lock tmp
   case "$value" in 0|1) ;; *) return 1 ;; esac
@@ -183,7 +191,7 @@ cmd_route() {
 
 cmd_launch() {
   local id=$1 harness=$2 model=$3 effort=$4 selected_backend=$5 requested_self_continue=${6:-} traceparent=${7:-}
-  local current meta out herdr_session self_continue actual_model actual_effort
+  local current meta out herdr_session self_continue actual_model actual_effort actual_self_continue requested_policy
   if [ "$requested_self_continue" != 0 ] && [ "$requested_self_continue" != 1 ] && [ "$requested_self_continue" != - ] && [ -z "$traceparent" ]; then
     traceparent=$requested_self_continue
     requested_self_continue=-
@@ -205,6 +213,7 @@ cmd_launch() {
   case "$selected_backend" in herdr) ;; *) die "a remote secondmate runs only on the herdr backend, not '$selected_backend'" ;; esac
   mkdir -p "$CONTROL_STATE" "$CONTROL_DATA"
   meta=$(meta_path "$id")
+  requested_policy=$requested_self_continue
   case "$requested_self_continue" in
     0|1) self_continue=$requested_self_continue ;;
     *)
@@ -212,11 +221,7 @@ cmd_launch() {
       case "$self_continue" in
         0|1) ;;
         *)
-          if [ -f "$TARGET_HOME/data/charter.md" ] && grep '^Self-continuation: enabled$' "$TARGET_HOME/data/charter.md" >/dev/null 2>&1; then
-            self_continue=1
-          else
-            self_continue=0
-          fi
+          self_continue=$(remote_endpoint_charter_self_continue)
           ;;
       esac
       ;;
@@ -236,9 +241,20 @@ cmd_launch() {
         if [ "$effort" != - ] && [ "$effort" != "$actual_effort" ]; then
           die "remote secondmate $id is already alive with effort '$actual_effort', requested '$effort'; refusing to reuse the endpoint"
         fi
+        actual_self_continue=$(fm_meta_get "$meta" self_continue)
+        case "$actual_self_continue" in
+          0|1) ;;
+          *) actual_self_continue=$(remote_endpoint_charter_self_continue) ;;
+        esac
+        if [ "$requested_policy" = 0 ] || [ "$requested_policy" = 1 ]; then
+          [ "$actual_self_continue" = "$requested_policy" ] ||
+            die "remote secondmate $id is already alive with self-continuation '$actual_self_continue', requested '$requested_policy'; refusing to reuse the endpoint"
+        fi
         REMOTE_ENDPOINT_MODEL=$actual_model
         REMOTE_ENDPOINT_EFFORT=$actual_effort
-        remote_endpoint_set_self_continue "$id" "$self_continue" || die "could not reconcile remote secondmate self-continuation policy"
+        if [ "$(fm_meta_get "$meta" self_continue)" != "$actual_self_continue" ]; then
+          remote_endpoint_set_self_continue "$id" "$actual_self_continue" || die "could not backfill remote secondmate self-continuation policy"
+        fi
         print_route "$id"
         return 0
         ;;

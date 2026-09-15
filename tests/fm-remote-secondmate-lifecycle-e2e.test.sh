@@ -757,6 +757,35 @@ cmp -s "$TMP_ROOT/remote-ios-before-model-drift.meta" "$REMOTE_HOME/state/parent
 printf 'codex\n' > "$PARENT/config/secondmate-harness"
 pass "a live remote secondmate refuses a changed model pin without rewriting either route"
 
+# A live endpoint's continuation policy is just as runtime-bound as its model:
+# changing only the parent's requested value must not rewrite durable metadata
+# while the old process keeps following its original charter.
+cp "$REMOTE_HOME/state/parent-route/ios.meta" "$TMP_ROOT/remote-ios-before-self-continue-drift.meta"
+cp "$REMOTE_HOME/data/charter.md" "$TMP_ROOT/remote-ios-charter-before-self-continue-drift.md"
+printf 'Self-continuation: enabled\n' >> "$REMOTE_HOME/data/charter.md"
+sed 's/^self_continue=.*/self_continue=1/' \
+  "$REMOTE_HOME/state/parent-route/ios.meta" > "$TMP_ROOT/remote-ios-self-continue-drift.meta"
+mv "$TMP_ROOT/remote-ios-self-continue-drift.meta" "$REMOTE_HOME/state/parent-route/ios.meta"
+set +e
+remote_env "$ROOT/bin/fm-on.sh" ios fm-remote-secondmate-control.sh \
+  launch ios codex - - herdr 0 > "$TMP_ROOT/spawn-self-continue-drift.out" 2>&1
+self_continue_drift_rc=$?
+set -e
+[ "$self_continue_drift_rc" -ne 0 ] \
+  || fail "remote launch silently reused a live endpoint with a different self-continuation policy"
+assert_grep "already alive with self-continuation '1', requested '0'" \
+  "$TMP_ROOT/spawn-self-continue-drift.out" \
+  "self-continuation drift refusal did not name the observed and requested policies"
+if ! grep -Fx 'self_continue=1' "$REMOTE_HOME/state/parent-route/ios.meta" >/dev/null; then
+  printf 'live route after policy refusal:\n'; cat "$REMOTE_HOME/state/parent-route/ios.meta"
+  fail "self-continuation drift refusal rewrote the live endpoint policy"
+fi
+mv "$TMP_ROOT/remote-ios-before-self-continue-drift.meta" \
+  "$REMOTE_HOME/state/parent-route/ios.meta"
+mv "$TMP_ROOT/remote-ios-charter-before-self-continue-drift.md" \
+  "$REMOTE_HOME/data/charter.md"
+pass "a live remote secondmate refuses a changed self-continuation policy without rewriting its route"
+
 remote_route_meta="$REMOTE_HOME/state/parent-route/ios.meta"
 cp "$remote_route_meta" "$TMP_ROOT/remote-ios-before-default-session.meta"
 legacy_pane=$(sed -n 's/^herdr_pane_id=//p' "$remote_route_meta")
