@@ -557,9 +557,9 @@ test_documented_global_replace_leaves_the_herdr_gate_intact() {
 }
 
 test_secondmate_no_projects_charter() {
-  local home brief status test_state rec body
+  local home brief status
   home="$TMP_ROOT/no-projects-home"
-  mkdir -p "$home/data" "$home/state"
+  mkdir -p "$home/data"
 
   # The deliberate --no-projects signal scaffolds a valid project-less charter for
   # a domain whose subject is the firstmate repo itself (no clones needed).
@@ -578,31 +578,6 @@ test_secondmate_no_projects_charter() {
     "project-less charter kept the with-projects operating-model line"
   assert_grep '# The captain and the parent channel' "$brief" \
     "secondmate charter lost the parent-channel section"
-  test_state="$home/state/brief-worker.status"
-  printf 'blocked [key=waiting]: external approval\n' > "$test_state"
-  mkdir -p "$home/state/brief-worker.inbox/handled"
-  rec=$(bash -c '. "$1"; fm_task_inbox_write "$2" brief-worker "deliver the approval result"' _ \
-    "$ROOT/bin/fm-task-inbox-lib.sh" "$home/state") \
-    || fail "blocked secondmate could not receive a durable inbox instruction"
-  if ! FM_WORKER_RECORD="$rec" bash -c '
-    set -eu
-    . "$1"
-    fm_backend_agent_state() { printf "alive"; }
-    fm_backend_composer_state() { printf "empty"; }
-    fm_backend_send_text_submit() {
-      body=$(fm_task_inbox_body "$FM_WORKER_RECORD")
-      [ "$body" = "deliver the approval result" ]
-      mv "$FM_WORKER_RECORD" "${FM_WORKER_RECORD%/*}/handled/"
-      printf "empty"
-    }
-    fm_task_inbox_ring tmux "test:blocked-worker" "$FM_WORKER_RECORD"
-  ' _ "$ROOT/bin/fm-task-inbox-lib.sh"; then
-    fail "blocked secondmate inbox processing did not read and acknowledge the instruction"
-  fi
-  assert_present "$home/state/brief-worker.inbox/handled/001.msg" \
-    "blocked secondmate inbox instruction was not moved to handled"
-  assert_absent "$home/state/brief-worker.inbox/001.msg" \
-    "blocked secondmate inbox instruction remained unacknowledged"
   assert_grep 'Nobody reads this chat' "$brief" \
     "secondmate charter no longer says the chat is unread"
   assert_grep 'in this home it IS the captain' "$brief" \

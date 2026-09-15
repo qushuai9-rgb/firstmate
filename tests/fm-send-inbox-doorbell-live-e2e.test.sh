@@ -129,7 +129,6 @@ check_harness_doorbell() {  # <name>
   home="$LAB/$name-home"
   mkdir -p "$home/state"
   task="live-$name"
-  acted="$LAB/acted-$name"
   tmux -L "$SOCKET" new-window -d -t "$SESSION:" -n "$win" -c "$ROOT" \
     -- bash -lc "$cmd" \
     || { FAILED=1; printf 'not ok - %s (%s): could not launch in the isolated tmux server\n' "$name" "$version" >&2; return 0; }
@@ -143,11 +142,16 @@ check_harness_doorbell() {  # <name>
   fi
   [ "$ready_rc" -eq 0 ] || note "$name ($version): idle composer never classified empty; proceeding as production does (advisory check skips only on pending)"
   printf 'window=%s:%s\nkind=ship\nharness=%s\n' "$SESSION" "$win" "$name" > "$home/state/$task.meta"
+
+  # Exercise the real worker once without a blocked status and once with a
+  # durable blocked status. Both cases use fm-send's product delivery path.
+  rm -f "$home/state/$task.status"
+  acted="$LAB/acted-$name-unblocked"
   if ! FM_HOME="$home" FM_ROOT_OVERRIDE="$home" "$ROOT/bin/fm-send.sh" "$task" \
     "Firstmate live check: run exactly this shell command now: touch $acted - then follow the mv instruction you were given for this message. Reply with one short line." \
     >/dev/null 2>&1; then
     FAILED=1
-    printf 'not ok - %s (%s): fm-send refused the live steer\n' "$name" "$version" >&2
+    printf 'not ok - %s (%s): fm-send refused the unblocked live steer\n' "$name" "$version" >&2
     tmux -L "$SOCKET" kill-window -t "$SESSION:$win" 2>/dev/null || true
     return 0
   fi
@@ -155,29 +159,64 @@ check_harness_doorbell() {  # <name>
   handled="$home/state/$task.inbox/handled/001.msg"
   [ -f "$rec" ] || {
     FAILED=1
-    printf 'not ok - %s (%s): fm-send left no durable inbox record\n' "$name" "$version" >&2
+    printf 'not ok - %s (%s): fm-send left no durable unblocked inbox record\n' "$name" "$version" >&2
     tmux -L "$SOCKET" kill-window -t "$SESSION:$win" 2>/dev/null || true
     return 0
   }
   i=0
   while [ "$i" -lt "$TIMEOUT" ]; do
     [ -f "$handled" ] && [ -e "$acted" ] && break
-    # Halfway through, play the watcher's role once: re-ring an unacknowledged
-    # message so a doorbell swallowed by a startup or update modal recovers
-    # exactly as the production re-ring ladder recovers it.
     if [ "$i" -eq $((TIMEOUT / 2)) ] && [ -f "$rec" ]; then
       fm_task_inbox_ring tmux "$SESSION:$win" "$rec" || true
-      note "$name ($version): re-rang the doorbell once (watcher's role) at ${i}s"
+      note "$name ($version): re-rang the unblocked doorbell once at ${i}s"
+    fi
+    sleep 1
+    i=$((i + 1))
+  done
+  if [ ! -f "$handled" ] || [ ! -e "$acted" ]; then
+    FAILED=1
+    printf 'not ok - %s (%s): unblocked doorbell not honored within %ss (acted=%s acked=%s)\n' \
+      "$name" "$version" "$TIMEOUT" "$([ -e "$acted" ] && echo yes || echo no)" \
+      "$([ -f "$handled" ] && echo yes || echo no)" >&2
+    tmux -L "$SOCKET" capture-pane -p -t "$SESSION:$win" 2>/dev/null | grep '[^[:space:]]' | tail -10 | sed 's/^/#   /' >&2
+    tmux -L "$SOCKET" kill-window -t "$SESSION:$win" 2>/dev/null || true
+    return 0
+  fi
+
+  printf 'blocked [key=waiting]: external approval\n' > "$home/state/$task.status"
+  acted="$LAB/acted-$name-blocked"
+  if ! FM_HOME="$home" FM_ROOT_OVERRIDE="$home" "$ROOT/bin/fm-send.sh" "$task" \
+    "Firstmate live check: while the task is blocked, run exactly this shell command now: touch $acted - then follow the mv instruction you were given for this message. Reply with one short line." \
+    >/dev/null 2>&1; then
+    FAILED=1
+    printf 'not ok - %s (%s): fm-send refused the blocked live steer\n' "$name" "$version" >&2
+    tmux -L "$SOCKET" kill-window -t "$SESSION:$win" 2>/dev/null || true
+    return 0
+  fi
+  rec="$home/state/$task.inbox/002.msg"
+  handled="$home/state/$task.inbox/handled/002.msg"
+  [ -f "$rec" ] || {
+    FAILED=1
+    printf 'not ok - %s (%s): fm-send left no durable blocked inbox record\n' "$name" "$version" >&2
+    tmux -L "$SOCKET" kill-window -t "$SESSION:$win" 2>/dev/null || true
+    return 0
+  }
+  i=0
+  while [ "$i" -lt "$TIMEOUT" ]; do
+    [ -f "$handled" ] && [ -e "$acted" ] && break
+    if [ "$i" -eq $((TIMEOUT / 2)) ] && [ -f "$rec" ]; then
+      fm_task_inbox_ring tmux "$SESSION:$win" "$rec" || true
+      note "$name ($version): re-rang the blocked doorbell once at ${i}s"
     fi
     sleep 1
     i=$((i + 1))
   done
   if [ -f "$handled" ] && [ -e "$acted" ]; then
     CHECKED=$((CHECKED + 1))
-    pass "$name ($version): the doorbell reached a real worker, which acted and acked with the mv"
+    pass "$name ($version): real worker acted and acked both unblocked and blocked inbox messages"
   else
     FAILED=1
-    printf 'not ok - %s (%s): doorbell not honored within %ss (acted=%s acked=%s)\n' \
+    printf 'not ok - %s (%s): blocked doorbell not honored within %ss (acted=%s acked=%s)\n' \
       "$name" "$version" "$TIMEOUT" "$([ -e "$acted" ] && echo yes || echo no)" \
       "$([ -f "$handled" ] && echo yes || echo no)" >&2
     tmux -L "$SOCKET" capture-pane -p -t "$SESSION:$win" 2>/dev/null | grep '[^[:space:]]' | tail -10 | sed 's/^/#   /' >&2
