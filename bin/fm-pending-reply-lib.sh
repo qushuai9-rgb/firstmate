@@ -1185,6 +1185,47 @@ EOF
 
 # Escalate once after a missed recovery report or failed delivery outcome.
 # Retains the durable unresolved record. Never loops.
+# Reclaim a delivered escalation whose recovery turn completed, whose transport
+# was confirmed, and whose grace window elapsed without a correlated parent
+# report. The live record moves under expired/ so it no longer owns an OPEN
+# DECISIONS key, while the original status history remains intact for audit.
+_fm_pending_reply_expire_escalated_locked() {  # <state-dir> <corr_id>
+  local state=$1 corr=$2 rec phase outcome completed grace now age expired_dir
+  rec=$(fm_pending_reply_path "$state" "$corr")
+  [ -f "$rec" ] || return 1
+  phase=$(fm_pending_reply_get "$rec" phase)
+  [ "$phase" = escalated ] || return 1
+  outcome=$(fm_pending_reply_get "$rec" recovery_delivery_outcome)
+  [ "$outcome" = confirmed ] || return 1
+  completed=$(fm_pending_reply_get "$rec" recovery_turn_completed_epoch)
+  case "$completed" in ''|*[!0-9]*) return 1 ;; esac
+  grace=$(fm_pending_reply_get "$rec" grace_secs)
+  case "$grace" in ''|*[!0-9]*) grace=$(fm_pending_reply_grace_secs) ;; esac
+  now=$(fm_pending_reply_now)
+  age=$((now - completed))
+  [ "$age" -ge "$grace" ] || return 1
+  expired_dir="$(fm_pending_reply_dir "$state")/expired"
+  mkdir -p "$expired_dir" || return 1
+  [ ! -e "$expired_dir/$corr" ] && [ ! -L "$expired_dir/$corr" ] || return 1
+  fm_pending_reply_set "$rec" phase expired || return 1
+  fm_pending_reply_set "$rec" expired_epoch "$now" || return 1
+  mv "$rec" "$expired_dir/$corr" || return 1
+  printf '%s\n' "$now" > "$(fm_pending_reply_dir "$state")/.expired-$corr"
+}
+
+fm_pending_reply_expire_escalated() {  # <state-dir> <corr_id>
+  local state=$1 corr=$2 lock rc=0
+  local STATE FM_WAKE_QUEUE FM_WAKE_QUEUE_LOCK
+  STATE=$state
+  lock="$state/.pending-reply-$corr.lock"
+  # shellcheck source=bin/fm-wake-lib.sh
+  . "$_FM_PENDING_REPLY_LIB_DIR/fm-wake-lib.sh"
+  fm_lock_acquire_wait "$lock" || return 1
+  _fm_pending_reply_expire_escalated_locked "$state" "$corr" || rc=$?
+  fm_lock_release "$lock"
+  return "$rc"
+}
+
 fm_pending_reply_maybe_escalate() {  # <state-dir> <corr_id>
   # Serialized per correlation so a resolution and an escalation cannot interleave.
   # bin/fm-wake-lib.sh owns the lock primitives but assigns its own globals when
@@ -1489,6 +1530,7 @@ fm_pending_reply_tick() {  # <state-dir>
           fi
         fi
       fi
+      fm_pending_reply_expire_escalated "$state" "$corr" || true
       continue
     fi
     case "$phase" in

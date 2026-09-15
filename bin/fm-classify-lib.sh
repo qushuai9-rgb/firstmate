@@ -522,6 +522,73 @@ _fm_is_pending_reply_escalation() {  # <key> <note>
   esac
 }
 
+# 0 live / 1 proven absent / 2 undecided when a pending-reply decision still has a
+# durable record. The two absent answers are deliberately distinct: 1 is positive proof
+# the owning library retired the record, which retires the decision, while 2 means the
+# record's existence could not be established, which must never retire anything.
+# The pending-reply library owns where its records live and when they expire, so this
+# classifier only asks it rather than re-deriving a second path: a bare ${f%/*} cut
+# leaves a relative status path such as "task.status" unchanged under bash 3.2, which
+# would search a nonexistent "task.status/pending-replies" and read every live record as
+# orphaned. A live record keeps the decision whatever its phase, because closing it is
+# published as a status line; only a record retired as expired, by marker or by phase,
+# proves absence. A symlinked record is not read through, so it is undecided.
+_fm_pending_reply_record_state() {  # <status-file> <decision-key> -> 0|1|2
+  local f=$1 key=$2 corr state dir rec phase
+  corr=${key#pending-reply-}
+  [ -n "$corr" ] && [ "$corr" != "$key" ] || return 2
+  if [ -n "${FM_PENDING_REPLY_DIR_OVERRIDE:-}" ]; then
+    dir=$FM_PENDING_REPLY_DIR_OVERRIDE
+  else
+    state=$(dirname "${f:-}") || return 2
+    dir="$state/pending-replies"
+  fi
+  # Absence is only ever PROVEN by the owner's own retirement evidence: an expiry
+  # marker, or the retained audit copy it moves the record under. Anything else - no
+  # directory at all, no objects of any kind, a vanished record with no trace - reads
+  # as undecided, because inventing absence from silence is exactly how a real
+  # escalation gets hidden from the captain without anyone noticing.
+  case "$corr" in
+    ''|*[!A-Za-z0-9._-]*) return 2 ;;
+  esac
+  [ -L "$dir" ] && return 2
+  if [ ! -d "$dir" ]; then
+    # A relocated directory that was never created says nothing about any key.
+    [ -n "${FM_PENDING_REPLY_DIR_OVERRIDE:-}" ] && return 2
+    # The default location is created together with the records it holds, so a state
+    # directory that has one and never had the other proves nothing either: undecided.
+    [ -e "$dir" ] || return 2
+  fi
+  rec="$dir/$corr"
+  if [ -L "$rec" ]; then
+    return 2
+  elif [ -e "$rec" ]; then
+    [ -f "$rec" ] && [ -r "$rec" ] || return 2
+    if [ -e "$dir/.expired-$corr" ]; then
+      [ -f "$dir/.expired-$corr" ] && [ ! -L "$dir/.expired-$corr" ] && return 1
+      return 2
+    fi
+    phase=$(grep '^phase=' "$rec" 2>/dev/null | tail -1 | cut -d= -f2-)
+    case "$phase" in
+      expired) return 1 ;;
+      '') return 2 ;;
+    esac
+    return 0
+  fi
+  # No live record object: look for the owner's retirement evidence instead.
+  if [ -e "$dir/.expired-$corr" ]; then
+    [ -f "$dir/.expired-$corr" ] && [ ! -L "$dir/.expired-$corr" ] && return 1
+    return 2
+  fi
+  if [ -e "$dir/expired/$corr" ]; then
+    [ -f "$dir/expired/$corr" ] && [ ! -L "$dir/expired/$corr" ] && return 1
+    return 2
+  fi
+  # Nothing here ever owned this key, or it was deleted outside the owner's lifecycle.
+  # Either way the classifier cannot tell, so it must keep the decision open.
+  return 2
+}
+
 _fm_status_kind() {
   local meta=${1%.status}.meta kind=${2:-} line
   if [ -z "$kind" ]; then
@@ -534,8 +601,8 @@ _fm_status_kind() {
   case "$kind" in ship|scout|secondmate) printf '%s' "$kind" ;; *) printf unknown ;; esac
 }
 
-_fm_decision_fold_line() {  # <open-set> <status-line> <resolve-verb> <held-verb> <kind>
-  local open=$1 line=$2 resolve=$3 held=$4 kind=$5 verb key note
+_fm_decision_fold_line() {  # <open-set> <status-line> <resolve-verb> <held-verb> <kind> <status-file>
+  local open=$1 line=$2 resolve=$3 held=$4 kind=$5 f=$6 verb key note pr_state=0
   # Declaration guard. A transition's verb ends at a colon, or - in the colonless
   # form _fm_decision_key still accepts below - at a complete "[key=...]" token.
   # A line holding neither is continuation prose, a bare word, or blank, and can
@@ -558,9 +625,47 @@ _fm_decision_fold_line() {  # <open-set> <status-line> <resolve-verb> <held-verb
   key=$(_fm_decision_key "$line") || { printf '%s' "$open"; return 0; }
   _fm_decision_key_transition_allowed "$key" "$(status_line_note "$line")" \
     || { printf '%s' "$open"; return 0; }
+  # Two sources, one job each: the status log says whether a decision was ANSWERED,
+  # and the pending-reply record says whether that decision still EXISTS. Membership is
+  # settled at this single point rather than by a pass over the finished set, so
+  # upstream's kind-aware supersession above still retires a ship or scout terminal
+  # first, and reading ownership later would reopen decisions it had just closed.
+  # A pending-reply key opens on its own vocabulary alone; the record never gates entry.
+  # Proven record absence instead produces one explicit synthetic retirement below - a
+  # decision whose owning record was cleaned up half-way must stop being captain-facing
+  # through an event, not by vanishing. An undecidable read (unresolvable directory,
+  # unreadable or symlinked object) keeps the decision open and says so once per episode:
+  # "cannot tell" is never evidence of "does not exist", because permanently hiding a
+  # real escalation from the captain is worse than replaying one.
+  case "$key" in
+    pending-reply-*)
+      _fm_pending_reply_record_state "$f" "$key"
+      pr_state=$?
+      ;;
+    *)
+      # Not a pending-reply key, so the record says nothing about it at all; every
+      # non-pending-reply line folds exactly as it did before this guard existed.
+      pr_state=0
+      ;;
+  esac
   case "$verb" in
     needs-decision|blocked)
+      if [ "$pr_state" -eq 1 ]; then
+        # Proven-orphan retirement: the owning record carries expiry evidence, so this
+        # decision is closed through an explicit fold event rather than silently kept.
+        # Any earlier row for the key is dropped and nothing replaces it, which is what
+        # stops a cleaned-up correlation from replaying on every poll forever. A reader
+        # still sees why in the status log itself: expiry is the owner's own transition,
+        # never a worker's answer, so the two cannot be confused.
+        open=$(_fm_decision_drop "$open" "$key")
+        printf '%s' "$open"
+        return 0
+      fi
       note=$(status_line_note "$line")
+      if [ "$pr_state" -eq 2 ]; then
+        # Undecidable: keep it open, but say what could not be decided.
+        note="${note} [pending-reply-record-undecidable]"
+      fi
       open=$(_fm_decision_drop "$open" "$key")
       [ -n "$open" ] && open="${open}"$'\n'
       open="${open}${key}"$'\t'"${verb}"$'\t'"${note}"$'\n'
@@ -597,7 +702,7 @@ status_open_decisions() {  # <status-file> [<kind>]
     status_line_verb "$line" verb
     case "$verb" in
       needs-decision|blocked|done|failed|"$resolve"|"$held")
-        open=$(_fm_decision_fold_line "$open" "$line" "$resolve" "$held" "$kind")
+        open=$(_fm_decision_fold_line "$open" "$line" "$resolve" "$held" "$kind" "$f")
         ;;
     esac
   done < "$f"
@@ -693,7 +798,7 @@ status_key_closing_verb() {  # <status-file> <key>
     esac
     was=0
     _fm_open_set_has "$open" "$want" && was=1
-    open=$(_fm_decision_fold_line "$open" "$line" "$resolve" "$held" "$kind")
+    open=$(_fm_decision_fold_line "$open" "$line" "$resolve" "$held" "$kind" "$f")
     if [ "$was" = 1 ] && ! _fm_open_set_has "$open" "$want"; then
       verb=$event
     fi
@@ -808,10 +913,14 @@ _fm_open_decisions_cursor_path() {  # <status-file>
 # 8: a colonless line without a complete "[key=...]" token is no longer a
 # transition at all, so a cursor holding a phantom decision that bare prose
 # opened - which no later line could close - is discarded.
+# 9: a pending-reply decision is now retired from inside the fold when its owning
+# record is proven absent, so a cursor persisted under version 8 can still be holding a
+# decision no later status line can close; that reading is discarded and rebuilt from
+# byte 0 under the new one.
 # Version 4 was already spent on the bracketed-tag parser change above, and a
 # cursor persisted under that reading predates this one, so it must still be
 # discarded and rebuilt from byte 0 under the new reading.
-FM_OPEN_DECISIONS_FOLD_VERSION=8
+FM_OPEN_DECISIONS_FOLD_VERSION=9
 
 # Portable device:inode identity for the rotation/recreation check below.
 _fm_open_decisions_file_ident() {  # <file> -> strongest available identity
@@ -979,7 +1088,7 @@ status_open_decisions_incremental() {  # <status-file> [<captured-end-offset>]
     resolve=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
     held=${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}
     while IFS= read -r line || [ -n "$line" ]; do
-      open=$(_fm_decision_fold_line "$open" "$line" "$resolve" "$held" "$kind")
+      open=$(_fm_decision_fold_line "$open" "$line" "$resolve" "$held" "$kind" "$f")
     done < "$chunk_file"
     rm -f "$chunk_file"
     offset=$size
@@ -1774,7 +1883,7 @@ _fm_status_open_decision_origins() {  # <status-file> [<kind>]
   held=${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}
   while IFS= read -r line || [ -n "$line" ]; do
     number=$((number + 1))
-    after=$(_fm_decision_fold_line "$open" "$line" "$resolve" "$held" "$kind")
+    after=$(_fm_decision_fold_line "$open" "$line" "$resolve" "$held" "$kind" "$f")
     [ -n "$after" ] || origins=''
     key=$(_fm_decision_key "$line") || { open=$after; continue; }
     verb=$(status_line_verb "$line")
@@ -2056,6 +2165,35 @@ crew_worktree_written_since() {  # <id> <state> <anchor-file>
       -type f -newer "$anchor" -print -quit 2>/dev/null || true)
   fi
   [ -n "$hit" ]
+}
+
+# 0 when a local secondmate home has produced durable product output newer than
+# <anchor-file>. Its own state/ supervision records are excluded because they
+# churn during healthy idle operation; data/, projects/, and an explicitly
+# configured turn_hang_output= root are the observable product surfaces.
+secondmate_output_written_since() {  # <id> <state> <anchor-file>
+  local id=$1 state=$2 anchor=$3 meta home kind marker hit extra bound root
+  local -a roots=()
+  [ -n "$id" ] && [ -f "$anchor" ] || return 1
+  meta="$state/$id.meta"
+  [ -f "$meta" ] && [ ! -L "$meta" ] || return 1
+  kind=$(grep '^kind=' "$meta" 2>/dev/null | tail -1 | cut -d= -f2- || true)
+  [ "$kind" = secondmate ] || return 1
+  home=$(grep '^home=' "$meta" 2>/dev/null | tail -1 | cut -d= -f2- || true)
+  [ -n "$home" ] && [ -d "$home" ] || return 1
+  marker=$(cat "$home/.fm-secondmate-home" 2>/dev/null || true)
+  [ "$marker" = "$id" ] || return 1
+  roots+=("$home/data" "$home/projects")
+  extra=$(grep '^turn_hang_output=' "$meta" 2>/dev/null | tail -1 | cut -d= -f2- || true)
+  [ -z "$extra" ] || roots+=("$extra")
+  bound=$FM_WORKTREE_WRITE_TIMEOUT
+  case "$bound" in ''|*[!0-9]*|0) bound=10 ;; esac
+  for root in "${roots[@]}"; do
+    [ -d "$root" ] || continue
+    hit=$(fm_run_timed "$bound" find "$root" -xdev -type f -newer "$anchor" -print -quit 2>/dev/null || true)
+    [ -n "$hit" ] && return 0
+  done
+  return 1
 }
 
 # 0 (benign/absorb) if EVERY task referenced by a no-verb "signal:" wake is provably

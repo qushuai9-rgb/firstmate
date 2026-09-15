@@ -578,6 +578,8 @@ test_secondmate_no_projects_charter() {
     "project-less charter kept the with-projects operating-model line"
   assert_grep '# The captain and the parent channel' "$brief" \
     "secondmate charter lost the parent-channel section"
+  assert_grep 'A blocked or needs-decision status does not suspend this inbox contract' "$brief" \
+    "secondmate charter allowed a blocked decision to suppress inbox processing"
   assert_grep 'Nobody reads this chat' "$brief" \
     "secondmate charter no longer says the chat is unread"
   assert_grep 'in this home it IS the captain' "$brief" \

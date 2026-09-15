@@ -1517,13 +1517,15 @@ if [ "$RELAUNCH" -eq 1 ]; then
     HERDR_TAB_ID=$(fm_meta_get "$RELAUNCH_META" herdr_tab_id)
     HERDR_PANE_ID=$(fm_meta_get "$RELAUNCH_META" herdr_pane_id)
   fi
-  # With no explicit harness, a relaunch reuses the harness already recorded
-  # for this task. It must NOT fall through to the fresh-spawn config
-  # resolution, which would silently move an existing task onto whatever the
-  # crew or secondmate default currently says. Choosing a different harness is
-  # the caller's explicit decision, made with --harness (bin/fm-control.sh
-  # resolves that decision, including a secondmate's durable pin).
-  ARG3=${HARNESS_ARG:-$RELAUNCH_PRIOR_HARNESS}
+  # A secondmate's configured profile is its durable launch authority, so a
+  # direct relaunch without an explicit harness must re-read it just like a
+  # fresh secondmate spawn. Other task kinds keep their recorded harness unless
+  # the caller explicitly selects another one.
+  if [ "$KIND" = secondmate ] && [ "$HARNESS_SET" -eq 0 ]; then
+    ARG3=
+  else
+    ARG3=${HARNESS_ARG:-$RELAUNCH_PRIOR_HARNESS}
+  fi
   [ -n "$ARG3" ] || {
     echo "error: task $ID has no recorded harness; pass --harness to relaunch it" >&2
     exit 1
@@ -2525,7 +2527,19 @@ if [ "$KIND" = secondmate ]; then
   else
     BRIEF="$DATA/$ID/brief.md"
   fi
-  SECONDMATE_SELF_CONTINUE=$(grep '^Self-continuation: enabled$' "$BRIEF" >/dev/null 2>&1 && printf 1 || printf 0)
+  if [ "$RELAUNCH" -eq 1 ]; then
+    # A valid durable value belongs to the existing secondmate incarnation and
+    # must survive replacement even if the charter was edited while it was
+    # stopped. Only an absent or malformed legacy field is backfilled from the
+    # charter, so old records converge without resetting an explicit policy.
+    prior_self_continue=$(fm_meta_get "$RELAUNCH_META" self_continue)
+    case "$prior_self_continue" in
+      0|1) SECONDMATE_SELF_CONTINUE=$prior_self_continue ;;
+      *) SECONDMATE_SELF_CONTINUE=$(grep '^Self-continuation: enabled$' "$BRIEF" >/dev/null 2>&1 && printf 1 || printf 0) ;;
+    esac
+  else
+    SECONDMATE_SELF_CONTINUE=$(grep '^Self-continuation: enabled$' "$BRIEF" >/dev/null 2>&1 && printf 1 || printf 0)
+  fi
 else
   PROJ_ABS="$(cd "$(resolve_project_dir_arg "$PROJ")" && pwd)"
   WT=""

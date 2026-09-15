@@ -1506,6 +1506,37 @@ test_failed_send_discards_undelivered_expectation() {
   pass "failed transport discards undelivered expectation only"
 }
 
+test_confirmed_escalated_reply_expires_after_grace() {
+  local home state corr rec
+  home=$(setup_parent expire-confirmed)
+  state="$home/state"
+  export FM_PENDING_REPLY_NOW=10000
+  corr=$(fm_pending_reply_create "$home" "$state" hibit "confirmed but never answered")
+  fm_pending_reply_mark_delivered "$state" "$corr"
+  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_set "$rec" phase escalated
+  fm_pending_reply_set "$rec" recovery_delivery_outcome confirmed
+  fm_pending_reply_set "$rec" recovery_turn_completed_epoch 10000
+  printf 'blocked [key=pending-reply-%s]: pending-reply-missed: task=hibit pending-reply-id=%s request=confirmed but never answered\n' "$corr" "$corr" > "$state/hibit.status"
+  export FM_PENDING_REPLY_NOW=10121
+  fm_pending_reply_tick "$state" || fail "expiry tick failed"
+  [ ! -f "$rec" ] || fail "expired pending reply remained in the hot directory"
+  [ -f "$(fm_pending_reply_dir "$state")/expired/$corr" ] || fail "expired record was not retained for audit"
+  [ -z "$(status_open_decisions "$state/hibit.status")" ] || fail "expired correlation kept an orphan OPEN DECISIONS row"
+  pass "confirmed escalated pending replies expire after their grace window"
+}
+
+test_deleted_pending_record_does_not_replay_open_decision() {
+  local home state corr status
+  home=$(setup_parent deleted-record-fold)
+  state="$home/state"
+  corr=abcdef0123456789
+  status="$state/hibit.status"
+  printf 'blocked [key=pending-reply-%s]: pending-reply-missed: task=hibit pending-reply-id=%s request=deleted\n' "$corr" "$corr" > "$status"
+  [ -z "$(status_open_decisions "$status")" ] || fail "a deleted pending record was replayed as an open decision"
+  pass "deleted pending records do not reappear in OPEN DECISIONS"
+}
+
 test_escalated_undelivered_correlation_stays_retryable() {
   local home state corr rec marker delivered_corr delivered_rec open
   home=$(setup_parent escalated-retry)
@@ -1602,6 +1633,8 @@ test_tick_skips_terminal_and_reuses_target_observation
 test_correlations_reuse_only_for_matching_open_task
 test_tick_end_to_end_missed_then_escalate
 test_failed_send_discards_undelivered_expectation
+test_confirmed_escalated_reply_expires_after_grace
+test_deleted_pending_record_does_not_replay_open_decision
 test_remote_repost_waits_for_the_reply_channel
 test_mirrored_remote_reply_never_triggers_a_repost
 test_same_basename_self_home_corr_resolves_on_tick

@@ -281,3 +281,56 @@ only inside a resolved hunk.
    already decided this key; the replayed edit wanted to reopen it with wording that
    describes my old `<task> <window>` reader. Upstream's implementation remains
    `<window> <idle>`, so its comment stands until `9942584a` replays and rewrites the reader.
+
+### `bin/fm-classify-lib.sh` — conflict replaying commit `e710b013` (S1 port)
+Ruled design applied: the durable-record check now sits at the point a `pending-reply-*`
+key enters the open set inside upstream's kind-aware fold, upstream's supersession order
+untouched. The post-fold ownership pass, its helper, and the `FM_CLASSIFY_STATUS_FILE`
+global it depended on are deleted outright rather than left as dead code, and the comment
+recording the old post-fold decision was rewritten to describe the new one. The fold gained
+a trailing `<status-file>` argument at all four call sites so membership no longer reaches
+for an ambient global. Fold version 8 -> 9, because a cursor persisted under 8 can still be
+holding a pending-reply decision whose record was deleted while nothing watched it, which is
+precisely the unclosable OPEN DECISIONS row this change exists to prevent.
+
+## STOP REPORT — three findings at this conflict, none resolved by editing assertions
+
+**F1. My own earlier design was self-contradictory, and I found it through test failure.**
+The rejected FM-018 note argued that deciding ownership per line "would re-test records that
+may only be created later in the same stream and let file read order change what is reported
+as open." That argument does not hold: reading a line *at* its position tests the record as
+of that moment, which is strictly less order-sensitive than testing once at the end. So S1's
+design is more correct than the design it replaced, and the justification written for the old
+one was wrong. Recorded here so nobody re-litigates F1 from the discarded note.
+
+**F2. A genuine semantic conflict needs your ruling: may a live record veto a terminal?**
+Three suites fail together for one reason (`fm-wake-drain-open-decisions`,
+`fm-classify-corr-token`, `fm-pending-reply`). All three fixtures assert a reserved key stays
+open purely because the namespace vocabulary is right, and none of them creates the durable
+record - they predate D3(a) and were seeded under the post-fold design where seeding happened
+to tolerate this. Under the in-fold rule now installed, absence of the record means "orphaned",
+so the legitimate owner is refused: *"the reserved namespace owner could not open through a
+token"*, *"resolution did not close the escalation decision"*.
+
+Two behaviors collide and only one can be true:
+- **live-record veto** (what I just implemented): a `pending-reply-*` decision cannot open
+  unless the owning library's record exists. Cost: if that library publishes its own status
+  line before writing the record, or runs with a relocated directory the classifier cannot
+  resolve, the mate's real escalation never appears and the captain never sees it.
+- **vocabulary-authoritative**: the reserved prefix plus its own note vocabulary opens the key
+  regardless of records. Cost: my D3(b) dangling-record symptom returns - a deleted record
+  keeps replaying every poll forever.
+
+Candidate third option, which I have NOT implemented because it is a design choice and not
+mine to make quietly: open on vocabulary, and treat record absence only as a *retirement*
+signal, never as a bar to opening. That closes both symptoms - a deleted record stops the
+replay because retirement applies to already-open keys, and a record-less opener still
+surfaces - but it changes what "ownership" means from permission to lifecycle, and it would
+need its own tests. Ruling requested before I continue past `e710b013`.
+
+**F3. Two of my commits are pure test edits that exist to prop up a behavior - flagged, not
+applied.** `42a3c8ba` ("give the reserved-key fixtures their durable owner") adds record
+seeds to those fixtures. I am not going to apply it while F2 is undecided, because seeding
+records into a fixture is exactly the shape of "editing the test to fit the implementation"
+you told me to avoid; and its sibling assertion in `fm-classify-corr-token` is about the
+namespace guard, which my change has nothing to do with. They stay unreplayed pending F2.

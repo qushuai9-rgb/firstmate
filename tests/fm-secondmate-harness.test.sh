@@ -797,6 +797,33 @@ test_spawn_secondmate_harness_model_token() {
 }
 
 # "<harness> <model> <effort>" threads both flags into the launch and meta.
+test_spawn_secondmate_unreachable_provider_keeps_configured_model_pin() {
+  local w sm meta launchlog launch out status fakebin
+  w="$TMP_ROOT/spawn-unreachable-provider"
+  sm="$w/sm"
+  launchlog="$w/launch.log"
+  mkdir -p "$w/home/config"
+  printf 'pi dasein/luna high\n' > "$w/home/config/secondmate-harness"
+  make_seeded_home "$sm" sm
+  fakebin=$(make_launch_capturing_tmux "$w/tmux")
+  : > "$launchlog"
+  out=$(PATH="$fakebin:$BLIND_BIN:$BASE_PATH" TMUX='' CLAUDECODE=1 \
+    FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$w/home" HOME="$w/home/user-home" CLAUDE_CONFIG_DIR='' \
+    FM_STATE_OVERRIDE="$w/home/state" FM_DATA_OVERRIDE="$w/home/data" \
+    FM_PROJECTS_OVERRIDE="$w/home/projects" FM_CONFIG_OVERRIDE="$w/home/config" \
+    FM_SPAWN_NO_GUARD=1 FM_FAKE_LAUNCH_LOG="$launchlog" \
+    "$ROOT/bin/fm-spawn.sh" sm "$sm" --secondmate 2>&1); status=$?
+  expect_code 0 "$status" "an unreachable provider listing must not silently change the configured pin$'\\n'$out"
+  meta="$w/home/state/sm.meta"
+  [ "$(meta_field "$meta" harness)" = pi ] || fail "unreachable-provider: harness pin was not preserved"
+  [ "$(meta_field "$meta" model)" = dasein/luna ] || fail "unreachable-provider: model pin was not preserved"
+  [ "$(meta_field "$meta" effort)" = high ] || fail "unreachable-provider: effort pin was not preserved"
+  launch=$(cat "$launchlog")
+  assert_contains "$launch" "--model 'dasein/luna'" "unreachable-provider: launch did not use the configured model pin"
+  assert_contains "$launch" "--thinking 'high'" "unreachable-provider: launch did not use the configured effort pin"
+  pass "unreachable provider uncertainty preserves the configured secondmate model pin"
+}
+
 test_spawn_secondmate_harness_model_and_effort_tokens() {
   local w sm meta launchlog launch
   w="$TMP_ROOT/spawn-model-effort-tokens"
@@ -2644,6 +2671,7 @@ test_spawn_backend_precedence_over_inherited_config
 test_spawn_explicit_backend_precedence_over_env_and_inherited_config
 test_spawn_bare_harness_no_model_effort_flag
 test_spawn_secondmate_harness_model_token
+test_spawn_secondmate_unreachable_provider_keeps_configured_model_pin
 test_spawn_secondmate_harness_model_and_effort_tokens
 test_spawn_explicit_model_overrides_secondmate_harness_token
 test_spawn_explicit_effort_overrides_secondmate_harness_token

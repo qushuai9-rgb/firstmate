@@ -755,6 +755,14 @@ recorded_windows() {
 # actionable because they do not carry this declaration. This is a read-only
 # observation: the receiving home owns acknowledgement and this parent never
 # changes the row or the foreign queue.
+secondmate_declared_idle() {  # <secondmate-home> <task-id>
+  local home=$1 task=$2 status last
+  status="$home/state/$task.status"
+  [ -f "$status" ] || return 1
+  last=$(awk 'NF { line=$0 } END { print line }' "$status" 2>/dev/null)
+  printf '%s\n' "$last" | grep -Eiq '^(paused|idle|working):[[:space:]]*(按指令[[:space:]]+idle|idle[[:space:]]+as[[:space:]]+directed|idle[[:space:]]+by[[:space:]]+instruction)' 2>/dev/null
+}
+
 secondmate_oldest_queue_row() {  # <queue-path>
   local queue=$1
   [ -f "$queue" ] && [ ! -L "$queue" ] || return 0
@@ -832,7 +840,10 @@ secondmate_wake_stall_tick() {
     marker="$STATE/.secondmate-wake-stall-$task"
     progress_marker="$STATE/.secondmate-wake-progress-$task"
     receipt_dir="$STATE/.secondmate-wake-stall-receipts/$task"
-    if [ -z "$row" ]; then
+    # An empty queue or an explicit idle declaration means there is no
+    # expected self-driven work for this mate. The endpoint is healthy and the
+    # queue-loop alarm must wait for a new routed row before timing progress.
+    if [ -z "$row" ] || secondmate_declared_idle "$home" "$task"; then
       rm -f "$marker" "$progress_marker"
       if [ -e "$receipt_dir" ] || [ -L "$receipt_dir" ]; then
         [ -d "$receipt_dir" ] && [ ! -L "$receipt_dir" ] || return 1

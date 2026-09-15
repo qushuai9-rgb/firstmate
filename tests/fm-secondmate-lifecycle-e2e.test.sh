@@ -226,10 +226,8 @@ phase_recovery() {
 }
 
 phase_relaunch_charter_policy() {
-  # An ordinary control relaunch re-derives the idle-lapse arming from the
-  # standing charter; it never carries a stale meta value. The charter is the
-  # owner, so both a disabled and an enabled standing policy must land in the
-  # replacement's record.
+  # A relaunch preserves an explicit durable policy even when the standing
+  # charter was edited while the old incarnation was stopped.
   local meta="$HOME_DIR/state/design.meta" window
   window=$(sed -n 's/^window=//p' "$meta")
   [ -n "$window" ] || fail "relaunch fixture has no recorded window"
@@ -238,18 +236,10 @@ phase_relaunch_charter_policy() {
   PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_DIR" FM_FAKE_TMUX_LOG="$LOG" FM_FAKE_TMUX_CAPTURE="$PANE" \
     FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_COMMAND=zsh FM_FAKE_TMUX_CWD="$SUB_ABS" \
     "$ROOT/bin/fm-spawn.sh" design --relaunch --harness codex >/dev/null \
-    || fail "secondmate relaunch after disabling the charter policy failed"
-  grep -qx 'self_continue=0' "$meta" \
-    || fail "relaunch did not re-derive self_continue=0 from the disabled charter"
-  sed -i.bak 's/^Self-continuation: disabled$/Self-continuation: enabled/' "$SUB/data/charter.md"
-  rm -f "$SUB/data/charter.md.bak"
-  PATH="$FAKEBIN:$PATH" FM_HOME="$HOME_DIR" FM_FAKE_TMUX_LOG="$LOG" FM_FAKE_TMUX_CAPTURE="$PANE" \
-    FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_COMMAND=zsh FM_FAKE_TMUX_CWD="$SUB_ABS" \
-    "$ROOT/bin/fm-spawn.sh" design --relaunch --harness codex >/dev/null \
-    || fail "secondmate relaunch after re-enabling the charter policy failed"
+    || fail "secondmate relaunch after editing the charter failed"
   grep -qx 'self_continue=1' "$meta" \
-    || fail "relaunch did not re-derive self_continue=1 from the enabled charter"
-  pass "relaunch: re-derives the continuation policy from the standing charter in both directions"
+    || fail "relaunch reset the explicit self_continue policy from the edited charter"
+  pass "relaunch: preserves an explicit continuation policy across charter edits"
 }
 
 phase_teardown() {

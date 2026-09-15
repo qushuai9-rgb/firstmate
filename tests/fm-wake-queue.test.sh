@@ -232,6 +232,25 @@ test_drain_dedupes_obvious_duplicates() {
 # plain drain-and-handle turn that runs no other supervision script. It must warn
 # when work is in flight with no live watcher, and stay silent right after a
 # normal fire from a live watcher with a fresh beacon, so it never false-alarms.
+test_secondmate_empty_or_declared_idle_queue_stays_silent() {
+  local dir state sub fakebin out
+  dir=$(make_case secondmate-idle-queue)
+  state="$dir/state"; sub="$dir/secondmate"; fakebin="$dir/fakebin"
+  mkdir -p "$sub/state"
+  printf 'mate\n' > "$sub/.fm-secondmate-home"
+  printf 'window=firstmate:fm-mate\nkind=secondmate\nhome=%s\n' "$sub" > "$state/mate.meta"
+  : > "$sub/state/.wake-queue"
+  out=$(FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
+    bash -c '. "$1"; secondmate_wake_stall_tick' _ "$ROOT/bin/fm-watch.sh")
+  [ -z "$out" ] || fail "an empty secondmate queue produced a stall notification: $out"
+  printf 'idle: 按指令 idle\n' > "$sub/state/mate.status"
+  printf '100\t7\tcheck\trouted\tcheck: routed row\n' > "$sub/state/.wake-queue"
+  out=$(FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
+    bash -c '. "$1"; secondmate_wake_stall_tick' _ "$ROOT/bin/fm-watch.sh")
+  [ -z "$out" ] || fail "an explicitly idle secondmate produced a stall notification: $out"
+  pass "empty and explicitly idle secondmate queues suppress wake-loop stall noise"
+}
+
 test_secondmate_foreign_queue_stall_tracks_progress_and_alerts_once() {
   local dir state sub fakebin out row_before row_after stall_count real_date
   dir=$(make_case secondmate-foreign-stall)
@@ -1985,6 +2004,7 @@ test_subshell_lock_ownership_without_bashpid
 test_bounded_lock_handoff_after_contention
 test_live_presentation_holder_is_deadlined_without_weakening_ack
 test_malformed_presentation_lock_reports_acquire_failure
+test_secondmate_empty_or_declared_idle_queue_stays_silent
 test_secondmate_foreign_queue_stall_tracks_progress_and_alerts_once
 test_secondmate_declared_pause_rows_do_not_feed_stall_escalation
 test_secondmate_reprovisioned_queue_starts_a_fresh_interval

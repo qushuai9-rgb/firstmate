@@ -1681,6 +1681,79 @@ test_relaunch_moves_a_drifted_item_back_in_flight() {
   pass "relaunch heals an item that drifted out of In flight while the task stayed live"
 }
 
+test_secondmate_relaunch_preserves_self_continue_and_uses_configured_model_pin() {
+  local dir out rc
+  dir=$(new_case secondmate-pin sm-pin)
+  local home="$dir/home" smhome="$dir/smhome"
+  fm_git_worktree "$dir/proj" "$smhome" sm-pin-branch
+  mkdir -p "$home/config" "$smhome/state" "$smhome/data" "$smhome/config" "$smhome/bin"
+  printf '# Firstmate\n' > "$smhome/AGENTS.md"
+  printf 'sm-pin\n' > "$smhome/.fm-secondmate-home"
+  printf 'Self-continuation: enabled\n' > "$smhome/data/charter.md"
+  printf 'codex dasein/luna high\n' > "$home/config/secondmate-harness"
+  {
+    echo 'window=fmses:fm-sm-pin'
+    echo 'endpoint_task_id=sm-pin'
+    echo "worktree=$smhome"
+    echo "project=$smhome"
+    echo 'harness=codex'
+    echo 'kind=secondmate'
+    echo 'mode=secondmate'
+    echo "home=$smhome"
+    echo 'model=xhy/luna'
+    echo 'effort=medium'
+    echo 'self_continue=1'
+  } > "$home/state/sm-pin.meta"
+  # Change the charter while the old metadata still says enabled. A relaunch
+  # must preserve the recorded policy rather than silently resetting it from
+  # the edited standing charter.
+  printf 'Self-continuation: disabled\n' > "$smhome/data/charter.md"
+  printf 'fm-sm-pin\n' > "$dir/fake/windows"
+  printf '%s' "$smhome" > "$dir/fake/cwd"
+  printf 'codex\n' > "$dir/fake/becomes"
+  out=$(run_control "$dir" sm-pin relaunch); rc=$?
+  expect_code 0 "$rc" "secondmate relaunch should use the configured pin and retain continuation"$'\n'"$out"
+  [ "$(meta_field "$dir" sm-pin self_continue)" = 1 ] || fail "relaunch reset self_continue"
+  [ "$(meta_field "$dir" sm-pin model)" = dasein/luna ] || fail "relaunch did not re-resolve the configured model pin"
+  pass "secondmate relaunch preserves self-continuation and re-resolves the configured model pin"
+}
+
+test_secondmate_relaunch_preserves_self_continue_and_uses_configured_model_pin
+
+test_secondmate_relaunch_backfills_missing_self_continue_from_disabled_charter() {
+  local dir out rc
+  dir=$(new_case secondmate-self-continue-missing sm-missing)
+  local home="$dir/home" smhome="$dir/smhome"
+  fm_git_worktree "$dir/proj" "$smhome" sm-missing-branch
+  mkdir -p "$home/config" "$smhome/state" "$smhome/data" "$smhome/bin"
+  printf '# Firstmate\n' > "$smhome/AGENTS.md"
+  printf 'sm-missing\n' > "$smhome/.fm-secondmate-home"
+  printf 'Self-continuation: disabled\n' > "$smhome/data/charter.md"
+  printf 'codex dasein/luna high\n' > "$home/config/secondmate-harness"
+  {
+    echo 'window=fmses:fm-sm-missing'
+    echo 'endpoint_task_id=sm-missing'
+    echo "worktree=$smhome"
+    echo "project=$smhome"
+    echo 'harness=codex'
+    echo 'kind=secondmate'
+    echo 'mode=secondmate'
+    echo "home=$smhome"
+    echo 'model=dasein/luna'
+    echo 'effort=high'
+  } > "$home/state/sm-missing.meta"
+  printf 'fm-sm-missing\n' > "$dir/fake/windows"
+  printf '%s' "$smhome" > "$dir/fake/cwd"
+  printf 'codex\n' > "$dir/fake/becomes"
+  out=$(run_control "$dir" sm-missing relaunch); rc=$?
+  expect_code 0 "$rc" "secondmate relaunch should backfill a missing continuation field"$'\n'"$out"
+  [ "$(meta_field "$dir" sm-missing self_continue)" = 0 ] \
+    || fail "relaunch did not backfill self_continue=0 from a disabled charter"
+  pass "secondmate relaunch backfills a missing continuation field from the charter"
+}
+
+test_secondmate_relaunch_backfills_missing_self_continue_from_disabled_charter
+
 test_same_harness_relaunch_keeps_identity_and_reuses_the_endpoint
 test_relaunch_refuses_before_exit_when_the_composer_holds_pending_text
 test_relaunch_refuses_before_exit_when_the_composer_state_is_unproven
