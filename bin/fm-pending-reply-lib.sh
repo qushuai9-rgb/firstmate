@@ -381,6 +381,21 @@ fm_pending_reply_delivery_confirmation_path() {  # <state-dir> <corr_id>
   printf '%s/.delivery-confirmed-%s' "$(fm_pending_reply_dir "$1")" "$2"
 }
 
+fm_pending_reply_expired_marker_path() {  # <state-dir> <corr_id>
+  printf '%s/.expired-%s' "$(fm_pending_reply_dir "$1")" "$2"
+}
+
+fm_pending_reply_write_expired_marker() {  # <state-dir> <corr_id> <epoch>
+  local state=$1 corr=$2 epoch=$3 marker dir tmp
+  marker=$(fm_pending_reply_expired_marker_path "$state" "$corr")
+  dir=$(dirname "$marker")
+  mkdir -p "$dir" || return 1
+  tmp="$marker.tmp.$$"
+  printf '%s\n' "$epoch" > "$tmp" || return 1
+  chmod 600 "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$marker"
+}
+
 fm_pending_reply_write_delivery_confirmation() {  # <state-dir> <corr_id> <state> <value>
   local pending_state=$1 corr=$2 delivery_state=$3 value=$4 marker dir tmp
   marker=$(fm_pending_reply_delivery_confirmation_path "$pending_state" "$corr")
@@ -1190,10 +1205,30 @@ EOF
 # report. The live record moves under expired/ so it no longer owns an OPEN
 # DECISIONS key, while the original status history remains intact for audit.
 _fm_pending_reply_expire_escalated_locked() {  # <state-dir> <corr_id>
-  local state=$1 corr=$2 rec phase outcome completed grace now age expired_dir
+  local state=$1 corr=$2 rec phase outcome completed grace now age expired_dir target
   rec=$(fm_pending_reply_path "$state" "$corr")
   [ -f "$rec" ] || return 1
   phase=$(fm_pending_reply_get "$rec" phase)
+  expired_dir="$(fm_pending_reply_dir "$state")/expired"
+  target="$expired_dir/$corr"
+  marker=$(fm_pending_reply_expired_marker_path "$state" "$corr")
+  mkdir -p "$expired_dir" || return 1
+  [ ! -L "$target" ] || return 1
+
+  if [ "$phase" = expired ]; then
+    now=$(fm_pending_reply_now)
+    [ -n "$(fm_pending_reply_get "$rec" expired_epoch)" ] ||
+      fm_pending_reply_set "$rec" expired_epoch "$now" || return 1
+    fm_pending_reply_write_expired_marker "$state" "$corr" "$now" || return 1
+    if [ -e "$target" ]; then
+      [ -f "$target" ] || return 1
+      rm -f "$rec" || return 1
+    else
+      mv "$rec" "$target" || return 1
+    fi
+    return 0
+  fi
+
   [ "$phase" = escalated ] || return 1
   outcome=$(fm_pending_reply_get "$rec" recovery_delivery_outcome)
   [ "$outcome" = confirmed ] || return 1
@@ -1204,13 +1239,12 @@ _fm_pending_reply_expire_escalated_locked() {  # <state-dir> <corr_id>
   now=$(fm_pending_reply_now)
   age=$((now - completed))
   [ "$age" -ge "$grace" ] || return 1
-  expired_dir="$(fm_pending_reply_dir "$state")/expired"
-  mkdir -p "$expired_dir" || return 1
-  [ ! -e "$expired_dir/$corr" ] && [ ! -L "$expired_dir/$corr" ] || return 1
+  [ ! -e "$target" ] || return 1
+
+  fm_pending_reply_write_expired_marker "$state" "$corr" "$now" || return 1
   fm_pending_reply_set "$rec" phase expired || return 1
   fm_pending_reply_set "$rec" expired_epoch "$now" || return 1
-  mv "$rec" "$expired_dir/$corr" || return 1
-  printf '%s\n' "$now" > "$(fm_pending_reply_dir "$state")/.expired-$corr"
+  mv "$rec" "$target" || return 1
 }
 
 fm_pending_reply_expire_escalated() {  # <state-dir> <corr_id>
@@ -1489,6 +1523,10 @@ fm_pending_reply_tick() {  # <state-dir>
     [ -n "$corr" ] || corr=$(basename "$rec")
     task_id=$(fm_pending_reply_get "$rec" task_id)
     phase=$(fm_pending_reply_get "$rec" phase)
+    if [ "$phase" = expired ]; then
+      fm_pending_reply_expire_escalated "$state" "$corr" || true
+      continue
+    fi
     if [ "$phase" = resolved ]; then
       # Cheap no-op unless an escalation for this record is still open; this is
       # the retry that makes the close converge after a transient write failure.
@@ -1598,7 +1636,9 @@ fm_pending_reply_task_has_open() {  # <state-dir> <task_id>
     tid=$(fm_pending_reply_get "$rec" task_id)
     [ "$tid" = "$task_id" ] || continue
     phase=$(fm_pending_reply_get "$rec" phase)
-    [ "$phase" != resolved ] || continue
+    case "$phase" in
+      resolved|expired) continue ;;
+    esac
     return 0
   done
   return 1

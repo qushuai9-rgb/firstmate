@@ -1526,6 +1526,24 @@ test_confirmed_escalated_reply_expires_after_grace() {
   pass "confirmed escalated pending replies expire after their grace window"
 }
 
+test_expired_phase_residue_is_reclaimed_on_tick() {
+  local home state corr rec expired_dir marker
+  home=$(setup_parent expired-residue)
+  state="$home/state"
+  export FM_PENDING_REPLY_NOW=10200
+  corr=$(fm_pending_reply_create "$home" "$state" hibit "recover expired residue")
+  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_set "$rec" phase expired || fail "could not seed expired residue"
+  expired_dir="$(fm_pending_reply_dir "$state")/expired"
+  marker=$(fm_pending_reply_expired_marker_path "$state" "$corr")
+  [ ! -e "$marker" ] || fail "residue test unexpectedly started with an expiry marker"
+  fm_pending_reply_tick "$state" || fail "tick failed to reclaim expired residue"
+  [ ! -f "$rec" ] || fail "expired residue remained in the live directory"
+  [ -f "$expired_dir/$corr" ] || fail "expired residue was not retained for audit"
+  [ -f "$marker" ] || fail "reclaimed expired residue did not publish its marker"
+  pass "a phase=expired residue is self-healed by the next pending-reply tick"
+}
+
 test_deleted_pending_record_does_not_replay_open_decision() {
   local home state corr status
   home=$(setup_parent deleted-record-fold)
@@ -1634,6 +1652,7 @@ test_correlations_reuse_only_for_matching_open_task
 test_tick_end_to_end_missed_then_escalate
 test_failed_send_discards_undelivered_expectation
 test_confirmed_escalated_reply_expires_after_grace
+test_expired_phase_residue_is_reclaimed_on_tick
 test_deleted_pending_record_does_not_replay_open_decision
 test_remote_repost_waits_for_the_reply_channel
 test_mirrored_remote_reply_never_triggers_a_repost

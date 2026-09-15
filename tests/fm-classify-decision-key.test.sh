@@ -239,6 +239,28 @@ test_blocked_and_resolved_are_tag_order_independent() {
   pass "blocked/resolved parse their bare verb with any bracket-tag order preceding the colon"
 }
 
+test_status_span_blocked_pending_reply_first_cycle_is_safe() {
+  local dir status corr result rc
+  dir=$(case_dir span-pending-reply)
+  status="$dir/task.status"
+  corr=abcdef0123456789
+  mkdir -p "$dir/pending-replies"
+  : > "$dir/pending-replies/$corr"
+  printf 'blocked [key=pending-reply-%s]: pending-reply-missed: task=task pending-reply-id=%s request=finish report\n' \
+    "$corr" "$corr" > "$status"
+  unset FM_CLASSIFY_STATUS_FILE
+  result=$(status_span_first_actionable_record "$status" 0)
+  rc=$?
+  [ "$rc" -eq 0 ] || fail "a first-cycle pending-reply blocked signal failed to classify under set -u"
+  [ "$(status_open_decisions "$status")" = "$(printf 'pending-reply-%s\tblocked\tpending-reply-missed: task=task pending-reply-id=%s request=finish report\n' "$corr" "$corr")" ] \
+    || fail "the first-cycle pending-reply signal did not fold to its open decision"
+  case "$result" in
+    *'blocked [key=pending-reply-'*) ;;
+    *) fail "first-cycle pending-reply signal was not returned: '$result'" ;;
+  esac
+  pass "first-cycle pending-reply blocked signals classify without implicit status-file failure"
+}
+
 test_incremental_agrees_with_full_fold_across_appends() {
   local dir f expected
   dir=$(case_dir incremental)
@@ -275,6 +297,7 @@ test_corr_only_tag_opens_as_default_like_a_bare_line
 test_key_only_before_colon_still_opens_no_regression
 test_blocked_and_resolved_are_tag_order_independent
 test_incremental_agrees_with_full_fold_across_appends
+test_status_span_blocked_pending_reply_first_cycle_is_safe
 
 # status_key_closing_verb reports HOW the status side currently reads one key,
 # which is what lets a consumer tell a settled key from a key handed to a
