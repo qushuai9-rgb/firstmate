@@ -164,6 +164,8 @@ print_route() { # <id>
   printf 'target=%s\n' "$REMOTE_ENDPOINT_TARGET"
   printf 'herdr_session=%s\n' "$REMOTE_HERDR_SESSION"
   printf 'harness=%s\n' "$harness"
+  printf 'model=%s\n' "${REMOTE_ENDPOINT_MODEL:-$(fm_meta_get "$REMOTE_ENDPOINT_META" model)}"
+  printf 'effort=%s\n' "${REMOTE_ENDPOINT_EFFORT:-$(fm_meta_get "$REMOTE_ENDPOINT_META" effort)}"
   [ -z "$traceparent" ] || printf 'traceparent=%s\n' "$traceparent"
   [ -z "$self_continue" ] || printf 'self_continue=%s\n' "$self_continue"
 }
@@ -181,7 +183,7 @@ cmd_route() {
 
 cmd_launch() {
   local id=$1 harness=$2 model=$3 effort=$4 selected_backend=$5 requested_self_continue=${6:-} traceparent=${7:-}
-  local current meta out herdr_session self_continue
+  local current meta out herdr_session self_continue actual_model actual_effort
   if [ "$requested_self_continue" != 0 ] && [ "$requested_self_continue" != 1 ] && [ "$requested_self_continue" != - ] && [ -z "$traceparent" ]; then
     traceparent=$requested_self_continue
     requested_self_continue=-
@@ -224,6 +226,18 @@ cmd_launch() {
     current=$(fm_backend_agent_state "$REMOTE_ENDPOINT_BACKEND" "$REMOTE_ENDPOINT_TARGET" 2>/dev/null || printf 'unreadable\n')
     case "$current" in
       alive)
+        actual_model=$(fm_meta_get "$meta" model)
+        actual_effort=$(fm_meta_get "$meta" effort)
+        [ -n "$actual_model" ] || actual_model=default
+        [ -n "$actual_effort" ] || actual_effort=default
+        if [ "$model" != - ] && [ "$model" != "$actual_model" ]; then
+          die "remote secondmate $id is already alive with model '$actual_model', requested '$model'; refusing to reuse the endpoint"
+        fi
+        if [ "$effort" != - ] && [ "$effort" != "$actual_effort" ]; then
+          die "remote secondmate $id is already alive with effort '$actual_effort', requested '$effort'; refusing to reuse the endpoint"
+        fi
+        REMOTE_ENDPOINT_MODEL=$actual_model
+        REMOTE_ENDPOINT_EFFORT=$actual_effort
         remote_endpoint_set_self_continue "$id" "$self_continue" || die "could not reconcile remote secondmate self-continuation policy"
         print_route "$id"
         return 0

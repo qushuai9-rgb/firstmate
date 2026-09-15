@@ -738,6 +738,25 @@ publish_healthy_watcher_identity "$PARENT/state" "$PARENT" "$ROOT/bin/fm-watch.s
   || fail "remote endpoint delivery observation did not execute on its own host"
 pass "remote spawn launches on the remote-local backend and records a host-qualified route"
 
+# A live endpoint must be observed at its durable profile before a parent
+# publishes a changed pin into its own task record.
+cp "$PARENT/state/ios.meta" "$TMP_ROOT/parent-ios-before-model-drift.meta"
+cp "$REMOTE_HOME/state/parent-route/ios.meta" "$TMP_ROOT/remote-ios-before-model-drift.meta"
+printf 'codex dasein/luna\n' > "$PARENT/config/secondmate-harness"
+set +e
+remote_env "$ROOT/bin/fm-spawn.sh" ios --secondmate > "$TMP_ROOT/spawn-model-drift.out" 2>&1
+model_drift_rc=$?
+set -e
+[ "$model_drift_rc" -ne 0 ] || fail "remote spawn silently reused a live endpoint with a different model pin"
+assert_grep "already alive with model 'default', requested 'dasein/luna'" "$TMP_ROOT/spawn-model-drift.out" \
+  "model-pin drift refusal did not identify the observed and requested profiles"
+cmp -s "$TMP_ROOT/parent-ios-before-model-drift.meta" "$PARENT/state/ios.meta" \
+  || fail "model-pin drift refusal rewrote the parent metadata"
+cmp -s "$TMP_ROOT/remote-ios-before-model-drift.meta" "$REMOTE_HOME/state/parent-route/ios.meta" \
+  || fail "model-pin drift refusal rewrote the live endpoint metadata"
+printf 'codex\n' > "$PARENT/config/secondmate-harness"
+pass "a live remote secondmate refuses a changed model pin without rewriting either route"
+
 remote_route_meta="$REMOTE_HOME/state/parent-route/ios.meta"
 cp "$remote_route_meta" "$TMP_ROOT/remote-ios-before-default-session.meta"
 legacy_pane=$(sed -n 's/^herdr_pane_id=//p' "$remote_route_meta")

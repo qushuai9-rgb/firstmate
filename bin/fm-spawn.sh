@@ -738,7 +738,7 @@ fi
 
 spawn_remote_secondmate() {
   local id=$1 remote host root home harness positional model effort backend out rc meta tmp
-  local remote_backend remote_target remote_harness remote_herdr_session registry_lock remote_lock remote_generation
+  local remote_backend remote_target remote_harness remote_model remote_effort remote_herdr_session registry_lock remote_lock remote_generation
   local remote_traceparent remote_recorded_traceparent parent_self_continue sm_primary_head sync_out sync_rc
   local -a launch_args
   id=${POS[0]:-}
@@ -947,6 +947,8 @@ spawn_remote_secondmate() {
   remote_backend=$(printf '%s\n' "$out" | sed -n 's/^backend=//p' | tail -1)
   remote_target=$(printf '%s\n' "$out" | sed -n 's/^target=//p' | tail -1)
   remote_harness=$(printf '%s\n' "$out" | sed -n 's/^harness=//p' | tail -1)
+  remote_model=$(printf '%s\n' "$out" | sed -n 's/^model=//p' | tail -1)
+  remote_effort=$(printf '%s\n' "$out" | sed -n 's/^effort=//p' | tail -1)
   remote_self_continue=$(printf '%s\n' "$out" | sed -n 's/^self_continue=//p' | tail -1)
   case "$remote_self_continue" in
     0|1) ;;
@@ -979,6 +981,27 @@ spawn_remote_secondmate() {
     echo "error: remote launch returned Herdr session '${remote_herdr_session:-missing}', expected 'fm-remote'; preserving the remote route for reconciliation" >&2
     return 1
   fi
+  [ -n "$remote_model" ] && [ -n "$remote_effort" ] || {
+    fm_lock_release "$remote_lock" || true
+    fm_lock_release "$registry_lock" || true
+    fm_lock_release "$SPAWN_TASK_LOCK" || true
+    echo "error: remote launch returned malformed profile metadata; preserving the remote route for reconciliation" >&2
+    return 1
+  }
+  if [ "$model" != - ] && [ "$remote_model" != "${model#-}" ]; then
+    fm_lock_release "$remote_lock" || true
+    fm_lock_release "$registry_lock" || true
+    fm_lock_release "$SPAWN_TASK_LOCK" || true
+    echo "error: remote launch returned model '$remote_model', requested '${model#-}'; preserving the remote route for reconciliation" >&2
+    return 1
+  fi
+  if [ "$effort" != - ] && [ "$remote_effort" != "${effort#-}" ]; then
+    fm_lock_release "$remote_lock" || true
+    fm_lock_release "$registry_lock" || true
+    fm_lock_release "$SPAWN_TASK_LOCK" || true
+    echo "error: remote launch returned effort '$remote_effort', requested '${effort#-}'; preserving the remote route for reconciliation" >&2
+    return 1
+  fi
   # Record what the remote endpoint ACTUALLY carries, read back from its own
   # launch, rather than what this side hoped to deliver. That keeps the #995
   # guarantee that the recorded carrier is the identity the child received even
@@ -998,8 +1021,8 @@ spawn_remote_secondmate() {
     echo "mode=secondmate"
     echo "yolo=off"
     echo "tasktmp="
-    echo "model=${model#-}"
-    echo "effort=${effort#-}"
+    echo "model=$remote_model"
+    echo "effort=$remote_effort"
     echo "home=$home"
     echo "projects=$(secondmate_registry_field "$DATA/secondmates.md" "$id" projects)"
     echo "self_continue=$remote_self_continue"

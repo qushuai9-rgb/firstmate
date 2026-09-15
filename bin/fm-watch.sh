@@ -756,11 +756,14 @@ recorded_windows() {
 # observation: the receiving home owns acknowledgement and this parent never
 # changes the row or the foreign queue.
 secondmate_declared_idle() {  # <secondmate-home> <task-id>
-  local home=$1 task=$2 status last
+  local home=$1 task=$2 status last verb note
   status="$home/state/$task.status"
   [ -f "$status" ] || return 1
   last=$(awk 'NF { line=$0 } END { print line }' "$status" 2>/dev/null)
-  printf '%s\n' "$last" | grep -Eiq '^(paused|idle|working):[[:space:]]*(按指令[[:space:]]+idle|idle[[:space:]]+as[[:space:]]+directed|idle[[:space:]]+by[[:space:]]+instruction)' 2>/dev/null
+  verb=$(status_line_verb "$last")
+  case "$verb" in paused|idle|working) ;; *) return 1 ;; esac
+  note=$(status_line_note "$last")
+  printf '%s\n' "$note" | grep -Eiq '^(按指令[[:space:]]+idle|idle[[:space:]]+as[[:space:]]+directed|idle[[:space:]]+by[[:space:]]+instruction)' 2>/dev/null
 }
 
 secondmate_oldest_queue_row() {  # <queue-path>

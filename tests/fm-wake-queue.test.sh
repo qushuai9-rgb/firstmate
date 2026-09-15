@@ -248,6 +248,15 @@ test_secondmate_empty_or_declared_idle_queue_stays_silent() {
   out=$(FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
     bash -c '. "$1"; secondmate_wake_stall_tick' _ "$ROOT/bin/fm-watch.sh")
   [ -z "$out" ] || fail "an explicitly idle secondmate produced a stall notification: $out"
+  for idle_line in \
+    'paused [key=work-slug] [corr=0123456789abcdef]: 按指令 idle' \
+    'idle [corr=0123456789abcdef]: idle as directed' \
+    'working [key=work-slug] [corr=0123456789abcdef]: idle by instruction'; do
+    printf '%s\n' "$idle_line" > "$sub/state/mate.status"
+    out=$(FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
+      bash -c '. "$1"; secondmate_wake_stall_tick' _ "$ROOT/bin/fm-watch.sh")
+    [ -z "$out" ] || fail "a keyed explicitly idle secondmate produced a stall notification: $idle_line -> $out"
+  done
   pass "empty and explicitly idle secondmate queues suppress wake-loop stall noise"
 }
 

@@ -3712,6 +3712,16 @@ test_secondmate_idle_lapse_requires_self_continue_and_done() {
   printf '100\t2\tcheck\trouted\tcheck: continue\n' > "$home/state/.wake-queue"
   out=$(FM_SECONDMATE_IDLE_LAPSE_SECS=1 run_watch_tick "$state" "$fakebin" "$capture" secondmate_idle_lapse_tick)
   [ -z "$out" ] || fail "idle lapse alerted after an explicit idle declaration: $out"
+  local idle_line
+  for idle_line in \
+    'paused [key=work-slug] [corr=0123456789abcdef]: 按指令 idle' \
+    'idle [corr=0123456789abcdef]: idle as directed' \
+    'working [key=work-slug] [corr=0123456789abcdef]: idle by instruction'; do
+    printf '%s\n' "$idle_line" > "$state/mate.status"
+    rm -f "$state/.secondmate-idle-alerted-mate"
+    out=$(FM_SECONDMATE_IDLE_LAPSE_SECS=1 run_watch_tick "$state" "$fakebin" "$capture" secondmate_idle_lapse_tick)
+    [ -z "$out" ] || fail "idle lapse alerted for declared idle form '$idle_line': $out"
+  done
   pass "idle lapse requires continuation policy, expected work, and a terminal done status"
 }
 
