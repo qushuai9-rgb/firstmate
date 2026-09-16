@@ -755,17 +755,24 @@ recorded_windows() {
 # actionable because they do not carry this declaration. This is a read-only
 # observation: the receiving home owns acknowledgement and this parent never
 # changes the row or the foreign queue.
-secondmate_declared_idle() {  # <secondmate-home> <task-id>
-  local home=$1 task=$2 status child_status last verb note
+# Tri-state read of a mate's own newest status line, so a log that cannot be read
+# is never mistaken for a declared pause: 0 = that line declares directed idleness,
+# 1 = it does not, 3 = the line could not be read. Silence alone suppresses nothing.
+# A status object reached through a symlink is not this mate's own declaration, so it
+# reads as undecidable rather than as proof either way.
+secondmate_declared_idle() {  # <secondmate-home> <task-id> -> 0|1|3
+  local home=$1 task=$2 status child_status lines last verb note
   child_status="$home/state/$task.status"
   if [ -e "$child_status" ] || [ -L "$child_status" ]; then
-    [ -f "$child_status" ] && [ ! -L "$child_status" ] && [ -r "$child_status" ] || return 1
+    [ -f "$child_status" ] && [ ! -L "$child_status" ] && [ -r "$child_status" ] || return 3
     status=$child_status
   else
     status="$STATE/$task.status"
+    [ -f "$status" ] && [ ! -L "$status" ] && [ -r "$status" ] || return 3
   fi
-  [ -f "$status" ] && [ ! -L "$status" ] && [ -r "$status" ] || return 1
-  last=$(awk 'NF { line=$0 } END { print line }' "$status" 2>/dev/null)
+  lines=$(awk 'NF { print }' "$status" 2>/dev/null) || return 3
+  [ -n "$lines" ] || return 3
+  last=${lines##*$'\n'}
   verb=$(status_line_verb "$last")
   case "$verb" in paused|idle|working) ;; *) return 1 ;; esac
   note=$(status_line_note "$last")
@@ -803,13 +810,20 @@ secondmate_oldest_queue_row() {  # <queue-path>
   ' "$queue" 2>/dev/null
 }
 
-secondmate_no_expected_work() {  # <secondmate-home> <task-id>
+# Was any self-driven work expected of this mate? 0 = demonstrably not: the queue
+# holds no actionable row, or the mate's own (or, failing that, the parent-channel)
+# newest status line declares directed idleness, so the queue-loop and idle-lapse
+# alarms have nothing to time. 1 = an actionable row is waiting and nothing
+# declares the mate idle. 2 = the queue itself could not be trusted, which the
+# caller reports through the invalid-queue notice rather than as an alert. Never
+# treat an unreadable queue as proof that nothing was expected.
+secondmate_no_expected_work() {  # <secondmate-home> <task-id> -> 0|1|2
   local home=$1 task=$2 row queue queue_rc
   queue="$home/state/.wake-queue"
   row=$(secondmate_oldest_queue_row "$queue")
   queue_rc=$?
   case "$queue_rc" in
-    2) return 1 ;;
+    2) return 2 ;;
     0) secondmate_declared_idle "$home" "$task" || return 1 ;;
     1) return 0 ;;
     *) return 1 ;;
@@ -870,7 +884,7 @@ secondmate_in_active_turn() {  # <window> <idle>
 secondmate_wake_stall_tick() {
   local now=$(( $(date +%s) )) threshold=$SECONDMATE_WAKE_STALL_SECS
   local meta task kind remote_host home queue row queue_rc epoch seq row_key marker progress_marker progress observed_at observed_key
-  local receipt receipt_dir notify_key queued idle reason episode_alerted
+  local receipt receipt_dir notify_key queued idle reason episode_alerted expect_rc
   # Endpoint metadata admits this queue-loop check; secondmate-liveness owns registered mates whose endpoint is missing or dead.
   for meta in "$STATE"/*.meta; do
     [ -e "$meta" ] || continue
@@ -904,14 +918,32 @@ secondmate_wake_stall_tick() {
     marker="$STATE/.secondmate-wake-stall-$task"
     progress_marker="$STATE/.secondmate-wake-progress-$task"
     receipt_dir="$STATE/.secondmate-wake-stall-receipts/$task"
-    # An empty queue or an explicit idle declaration means there is no
-    # expected self-driven work for this mate. The endpoint is healthy and the
-    # queue-loop alarm must wait for a new routed row before timing progress.
-    if secondmate_no_expected_work "$home" "$task"; then
+    # Only two conditions suppress this alarm, and both must be proven: the foreign
+    # queue is demonstrably empty of actionable rows, or the mate's own newest status
+    # line declares directed idleness. An undecidable read keeps the alarm armed and
+    # says so once per episode, because a queue whose expectation cannot be
+    # established must never look like a mate with nothing to do.
+    secondmate_no_expected_work "$home" "$task"
+    expect_rc=$?
+    if [ "$expect_rc" -eq 0 ]; then
       rm -f "$marker" "$progress_marker"
       if [ -e "$receipt_dir" ] || [ -L "$receipt_dir" ]; then
         [ -d "$receipt_dir" ] && [ ! -L "$receipt_dir" ] || return 1
         rm -rf -- "$receipt_dir" || return 1
+      fi
+      continue
+    fi
+    if [ "$expect_rc" -ne 1 ]; then
+      # No interval can be timed against a drain position that could not be read,
+      # so clear the episode state and report the inability to decide through the
+      # same durable check wake a real stall uses, once per episode.
+      rm -f "$marker" "$progress_marker" || return 1
+      notify_key="secondmate-wake-loop-undecidable-$task"
+      reason="check: secondmate wake-loop undecidable: mate=$task cause=expectation-unreadable; the stall alarm remains armed"
+      queued=$(fm_wake_queued_keys check)
+      if ! printf '%s\n' "$queued" | grep -Fx "$notify_key" >/dev/null 2>&1; then
+        fm_wake_append check "$notify_key" "$reason" || return 1
+        wake "$reason"
       fi
       continue
     fi
@@ -1141,7 +1173,8 @@ secondmate_idle_lapse_tick() {
     [ "$(secondmate_self_continue_effective "$meta" "$home")" = 1 ] || continue
     [ -f "$home/.fm-secondmate-home" ] && [ ! -L "$home/.fm-secondmate-home" ] || continue
     [ "$(cat "$home/.fm-secondmate-home" 2>/dev/null || true)" = "$task" ] || continue
-    secondmate_no_expected_work "$home" "$task" && continue
+    secondmate_no_expected_work "$home" "$task"
+    [ $? -eq 0 ] || continue
     win=$(fm_backend_target_of_meta "$meta")
     [ -n "$win" ] || continue
     anchor="$STATE/.secondmate-idle-anchor-$task"
