@@ -758,12 +758,13 @@ recorded_windows() {
 secondmate_declared_idle() {  # <secondmate-home> <task-id>
   local home=$1 task=$2 status child_status last verb note
   child_status="$home/state/$task.status"
-  if [ -f "$child_status" ]; then
+  if [ -e "$child_status" ] || [ -L "$child_status" ]; then
+    [ -f "$child_status" ] && [ ! -L "$child_status" ] && [ -r "$child_status" ] || return 1
     status=$child_status
   else
     status="$STATE/$task.status"
   fi
-  [ -f "$status" ] || return 1
+  [ -f "$status" ] && [ ! -L "$status" ] && [ -r "$status" ] || return 1
   last=$(awk 'NF { line=$0 } END { print line }' "$status" 2>/dev/null)
   verb=$(status_line_verb "$last")
   case "$verb" in paused|idle|working) ;; *) return 1 ;; esac
@@ -783,7 +784,7 @@ secondmate_oldest_queue_row() {  # <queue-path>
         && payload ~ /^stale: .*\(paused [0-9]+s, awaiting external - declared (pause,|paused\))/
     }
     NF == 0 { next }
-    NF < 5 || $1 !~ /^[0-9]+$/ || $2 !~ /^[0-9]+$/ || $3 !~ /^(signal|stale|check|heartbeat)$/ || $4 == "" {
+    NF != 5 || $1 !~ /^[0-9]+$/ || $2 !~ /^[0-9]+$/ || $3 !~ /^(signal|stale|check|heartbeat)$/ || $4 == "" {
       invalid = 1
       next
     }
@@ -813,6 +814,23 @@ secondmate_no_expected_work() {  # <secondmate-home> <task-id>
     1) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+secondmate_invalid_queue_tick() {  # <task>
+  local task=$1 marker key reason queued
+  marker="$STATE/.secondmate-wake-queue-invalid-$task"
+  if [ -e "$marker" ] || [ -L "$marker" ]; then
+    [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
+    return 0
+  fi
+  key="secondmate-wake-queue-invalid-$task"
+  reason="check: secondmate wake queue invalid: mate=$task; queue supervision is continuing without treating it as empty"
+  queued=$(fm_wake_queued_keys check) || return 1
+  if ! printf '%s\n' "$queued" | grep -Fx "$key" >/dev/null 2>&1; then
+    fm_wake_append check "$key" "$reason" || return 1
+  fi
+  fm_wake_secondmate_queue_invalid_marker_write "$task" || return 1
+  wake "$reason"
 }
 
 # 0 iff <task> is demonstrably inside an active turn, through the watcher's own
@@ -871,8 +889,17 @@ secondmate_wake_stall_tick() {
     row=$(secondmate_oldest_queue_row "$queue")
     queue_rc=$?
     case "$queue_rc" in
-      0|1) ;;
-      *) return 1 ;;
+      0|1)
+        fm_wake_secondmate_queue_invalid_marker_clear "$task" || return 1
+        ;;
+      2)
+        secondmate_invalid_queue_tick "$task" || triage_log "secondmate wake queue remains invalid for $task"
+        continue
+        ;;
+      *)
+        triage_log "secondmate wake queue observation returned an unexpected result for $task"
+        continue
+        ;;
     esac
     marker="$STATE/.secondmate-wake-stall-$task"
     progress_marker="$STATE/.secondmate-wake-progress-$task"

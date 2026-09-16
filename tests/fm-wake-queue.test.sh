@@ -233,7 +233,7 @@ test_drain_dedupes_obvious_duplicates() {
 # when work is in flight with no live watcher, and stay silent right after a
 # normal fire from a live watcher with a fresh beacon, so it never false-alarms.
 test_secondmate_empty_or_declared_idle_queue_stays_silent() {
-  local dir state sub fakebin out
+  local dir state sub fakebin out rc
   dir=$(make_case secondmate-idle-queue)
   state="$dir/state"; sub="$dir/secondmate"; fakebin="$dir/fakebin"
   mkdir -p "$sub/state"
@@ -257,6 +257,14 @@ test_secondmate_empty_or_declared_idle_queue_stays_silent() {
       bash -c '. "$1"; secondmate_wake_stall_tick' _ "$ROOT/bin/fm-watch.sh")
     [ -z "$out" ] || fail "a keyed explicitly idle secondmate produced a stall notification: $idle_line -> $out"
   done
+  outside="$dir/untrusted.status"
+  printf 'paused [key=foreign] [corr=bad]: 按指令 idle\n' > "$outside"
+  rm -f "$sub/state/mate.status"
+  ln -s "$outside" "$sub/state/mate.status"
+  printf '100\t7\tcheck\trouted\tcheck: routed row\n' > "$sub/state/.wake-queue"
+  out=$(FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
+    bash -c '. "$1"; secondmate_declared_idle "$2" mate' _ "$ROOT/bin/fm-watch.sh" "$sub") && rc=0 || rc=$?
+  [ "$rc" -ne 0 ] || fail "a symlinked child status was trusted as an idle declaration"
   rm -f "$sub/state/mate.status"
   printf 'paused [key=work-slug] [corr=0123456789abcdef]: 按指令 idle\n' > "$state/mate.status"
   out=$(FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
@@ -290,9 +298,33 @@ test_secondmate_unsafe_queue_is_not_treated_as_empty() {
   out=$(FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
     bash -c '. "$1"; secondmate_wake_stall_tick' _ "$ROOT/bin/fm-watch.sh" 2>"$dir/tick.err") \
     || rc=$?
-  [ "$rc" -ne 0 ] || fail "wake-stall observation silently accepted an unsafe queue"
-  [ -z "$out" ] || fail "unsafe queue produced a misleading stall wake: $out"
-  pass "unsafe secondmate queues fail closed instead of suppressing supervision"
+  [ "$rc" -eq 0 ] || fail "wake-stall observation terminated on an unsafe queue"
+  printf '%s\n' "$out" | grep -F 'check: secondmate wake queue invalid: mate=mate' >/dev/null \
+    || fail "unsafe queue did not publish a queue-specific diagnostic: $out"
+  grep -F 'secondmate-wake-queue-invalid-mate' "$state/.wake-queue" >/dev/null \
+    || fail "unsafe queue diagnostic was not durable"
+  pass "unsafe secondmate queues stay supervised and publish a durable diagnostic"
+}
+
+test_secondmate_malformed_queue_keeps_watcher_supervising() {
+  local dir state sub out rc
+  dir=$(make_case secondmate-malformed-queue)
+  state="$dir/state"; sub="$dir/secondmate"
+  mkdir -p "$sub/state"
+  printf 'mate\n' > "$sub/.fm-secondmate-home"
+  printf 'window=firstmate:fm-mate\nkind=secondmate\nhome=%s\n' "$sub" > "$state/mate.meta"
+  printf 'not-a-complete-queue-row\n' > "$sub/state/.wake-queue"
+  rc=0
+  out=$(FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
+    bash -c '. "$1"; secondmate_wake_stall_tick' _ "$ROOT/bin/fm-watch.sh") || rc=$?
+  [ "$rc" -eq 0 ] || fail "a malformed queue made the watcher observation fail: $rc"
+  printf '%s\n' "$out" | grep -F 'check: secondmate wake queue invalid: mate=mate' >/dev/null \
+    || fail "malformed queue did not produce a queue diagnostic: $out"
+  [ -f "$state/.secondmate-wake-queue-invalid-mate" ] \
+    || fail "malformed queue diagnostic episode was not retained"
+  grep -F 'secondmate-wake-queue-invalid-mate' "$state/.wake-queue" >/dev/null \
+    || fail "malformed queue diagnostic was not durable"
+  pass "malformed secondmate queues publish diagnostics without disabling supervision"
 }
 
 test_secondmate_foreign_queue_stall_tracks_progress_and_alerts_once() {
@@ -2050,6 +2082,7 @@ test_live_presentation_holder_is_deadlined_without_weakening_ack
 test_malformed_presentation_lock_reports_acquire_failure
 test_secondmate_empty_or_declared_idle_queue_stays_silent
 test_secondmate_unsafe_queue_is_not_treated_as_empty
+test_secondmate_malformed_queue_keeps_watcher_supervising
 test_secondmate_foreign_queue_stall_tracks_progress_and_alerts_once
 test_secondmate_declared_pause_rows_do_not_feed_stall_escalation
 test_secondmate_reprovisioned_queue_starts_a_fresh_interval
