@@ -421,3 +421,76 @@ Counts after this change, run for real: `fm-pending-reply` **43 pass / 0 fail** 
 34 was met by adding the counter-case, not by dropping anything), `fm-classify-corr-token`
 **12/0**, `fm-classify-decision-key` (#3753's batch) **21/0**, `fm-wake-drain-open-decisions`
 **9/0**. No assertion in any upstream case was edited to reach these numbers.
+
+## Third ruling needed — the annotation cannot be stored, and that is load-bearing
+The replay of `6a392c8a` brought a case my design contradicts, and I am reporting it rather
+than quietly rewriting it again.
+
+`assert_fold()` in #3753's suite is not a single assertion: it requires the full fold AND the
+incremental cursor fold to agree byte-for-byte. Storing `[pending-reply-record-undecidable]`
+inside the note breaks that permanently, because the incremental path folds only newly
+appended bytes onto its persisted open set - a row persisted while the record was live can
+never be re-decorated when the record later disappears, so the two readers disagree forever,
+not just in this fixture. My earlier "fixed" runs did not exercise that pairing on a
+pending-reply key, which is why the defect surfaced only now.
+
+So condition 3's "keep it open and say so once per episode" must split:
+- **stored state (what stays open):** unchanged behavior - undecided keeps the decision open,
+  exactly as upstream's fold stores it, with no annotation inside the note. This preserves
+  full-vs-incremental agreement, which is itself an upstream guarantee.
+- **presentation (where it says so):** the annotating reader belongs at the point OPEN
+  DECISIONS is rendered for the captain or a wake, computed fresh from the record each time
+  rather than persisted. That also delivers "once per episode" naturally, since presentation
+  happens per drain instead of per stored row.
+
+Concretely I propose reverting `_fm_pending_reply_open_note` out of the fold and applying the
+same helper where `bin/fm-wake-drain-open-decisions` output is composed, plus a test that the
+undecidable label appears there and that full/incremental still agree. The alternative is
+dropping condition 3's visibility half, which I do not recommend because it makes suppression
+silent again. Awaiting your call before continuing past `6a392c8a`; nothing has been stashed,
+forced, or discarded, and the staged work remains intact at replay position 18 of 21.
+
+### Ruling 9 — uncertainty is presented, never stored (approved design applied)
+Upstream's own incremental section states the constraint this card hit: both folds reach what
+is open "via the exact same _fm_decision_fold_line rule ... so the two strategies can never
+disagree". Baking `[pending-reply-record-undecidable]` into a stored row breaks that
+permanently - the full fold re-reads whole files and could recompute the label, while the
+cursor-backed fold replays only appended bytes onto persisted state and would freeze whatever
+it once wrote. Two contradictory to-do lists would then appear whenever a cursor lagged, which
+is harder to find than D3(b) because it only shows up in that window.
+
+Applied shape:
+- **membership** carries the raw note only. `_fm_pending_reply_open_note` is gone from both
+  call sites, and open-set elements remain single-form (`key`, `verb`, `note`) with no
+  composite string introduced anywhere.
+- **presentation** asks the question at drain time through
+  `status_decision_record_undecidable <status-file> <key>`, a pure predicate that stores
+  nothing, and appends `[record-unreadable]` after the note.
+- **episode dedup lives in the presentation layer**, as required: markers named
+  `state/.open-decision-undecidable-<task>-<key>` are written by
+  `_open_decisions_undecidable_note` on the drain that first sees the uncertainty, consulted
+  on every later drain so the label is not repeated, and removed by
+  `_open_decisions_undecidable_reset` the moment the decision becomes decidable again. The
+  decision itself keeps being listed throughout; only the caveat fires once. Lifecycle is
+  therefore: created on undecided, cleared on decidable, never a second source of truth about
+  membership.
+- No sidecar structure was added, so there is nothing new to clean up beyond those markers.
+
+Required regression, added and green: `test_undecidable_key_keeps_both_folds_in_agreement`
+builds a log holding an undecided pending key (a foreign object planted behind a symlink at the
+owner's path), runs the full fold and the cursor-backed fold - including after the cursor has
+advanced and after further appends - and asserts their membership is byte-identical while the
+uncertainty is asserted only through the predicate. Its companion
+`test_undecidable_note_is_presented_once_per_episode` pins the marker behavior end to end.
+
+Two fixture corrections worth recording, because both were my error rather than upstream's:
+this suite did not source `bin/fm-classify-lib.sh`, so direct fold calls silently returned
+empty and looked like lost decisions; and the earlier live-record assertion drained before the
+baseline drain existed, mixing episode state into a membership test. Both fixed without touching
+any assertion's meaning.
+
+Counts after ruling 9, run for real: `fm-pending-reply` **46/0**, `fm-wake-drain-open-decisions`
+**11/0** (9 pre-existing plus the two new cases), `fm-classify-corr-token` **12/0**,
+`fm-classify-decision-key` (#3753's batch) **18/0**. FM-018's old comments carry no pointer to
+the discarded designs. Nothing force-pushed, stashed, or discarded; replay continues from
+`6a392c8a`.

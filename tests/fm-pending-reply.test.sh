@@ -1624,14 +1624,20 @@ test_recordless_pending_key_stays_open_and_reports_undecidable() {
   open=$(status_open_decisions "$status")
   printf '%s' "$open" | grep -F "pending-reply-$corr" >/dev/null \
     || fail "a recordless pending key was suppressed instead of staying open: '$open'"
+  # Uncertainty is never baked into the stored row; that question belongs to presentation.
   case "$open" in
-    *'[pending-reply-record-undecidable]'*) : ;;
-    *) fail "a recordless pending key stayed open without naming its uncertainty: '$open'" ;;
+    *'[pending-reply-record-undecidable]'*)
+      fail "an undecidable read leaked into stored membership: '$open'" ;;
   esac
+  # And the predicate that answers it says yes for exactly this key, no for a live one.
+  status_decision_record_undecidable "$status" "pending-reply-$corr" \
+    || fail "a recordless pending key did not read as undecided"
+  status_decision_record_undecidable "$status" "some-other-key" \
+    && fail "a non pending-reply key must never read as undecided"
   printf 'blocked [key=pending-reply-%s]: somebody else%s note\n' "$corr" "'" > "$state/other.status"
   open=$(status_open_decisions "$state/other.status")
   [ -z "$open" ] || fail "a foreign note opened a reserved key: '$open'"
-  pass "recordless pending keys stay open, name their uncertainty, and reject foreign notes"
+  pass "recordless pending keys stay open without storing uncertainty, and reject foreign notes"
 }
 
 test_symlinked_pending_record_is_not_owned_or_expired() {
@@ -1677,12 +1683,13 @@ test_symlinked_pending_record_is_not_owned_or_expired() {
   printf 'blocked [key=pending-reply-%s]: pending-reply-missed: task=hibit pending-reply-id=%s request=symlink ownership\n' \
     "$corr" "$corr" > "$status"
   # Undecided, never absent: a symlinked record keeps its decision visible rather than
-  # letting an object the owner never wrote either own or retire it.
+  # letting an object the owner never wrote either own or retire it. The stored row is
+  # unchanged by that uncertainty, which presentation reports instead.
   open=$(status_open_decisions "$status")
-  case "$open" in
-    *'[pending-reply-record-undecidable]'*) : ;;
-    *) fail "a symlinked record did not stay visible as undecidable: '$open'" ;;
-  esac
+  printf '%s' "$open" | grep -F "pending-reply-$corr" >/dev/null \
+    || fail "a symlinked record closed its decision instead of staying open: '$open'"
+  status_decision_record_undecidable "$status" "pending-reply-$corr" \
+    || fail "a symlinked record did not read as undecided"
   export FM_PENDING_REPLY_NOW=10600
   fm_pending_reply_tick "$state" || fail "tick failed on a symlinked record"
   [ -L "$rec" ] || fail "tick should not retire a symlinked live record"

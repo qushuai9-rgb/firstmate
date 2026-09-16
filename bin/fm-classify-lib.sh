@@ -593,18 +593,21 @@ _fm_status_kind() {
   case "$kind" in ship|scout|secondmate) printf '%s' "$kind" ;; *) printf unknown ;; esac
 }
 
-_fm_pending_reply_open_note() {  # <status-file> <key> <note>
-  local f=$1 key=$2 note=$3
+# Presentation-time question: is this still-open decision one whose owning record could
+# not be read right now? Membership never consults it, and nothing it answers is ever
+# stored, because the full fold re-reads whole files while the cursor-backed incremental
+# fold replays only appended bytes onto persisted state - an annotation baked into an open
+# set row would therefore be recomputed by one strategy and frozen in the other, breaking
+# their documented guarantee to agree on what is open. Callers render uncertainty from the
+# record as of the moment they speak instead, so both strategies keep showing the same set.
+status_decision_record_undecidable() {  # <status-file> <decision-key> -> 0 when undecided
+  local f=$1 key=$2
   case "$key" in
     pending-reply-*) ;;
-    *) printf '%s' "$note"; return 0 ;;
+    *) return 1 ;;
   esac
   _fm_pending_reply_record_state "$f" "$key"
-  if [ $? -eq 2 ]; then
-    printf '%s [pending-reply-record-undecidable]' "$note"
-  else
-    printf '%s' "$note"
-  fi
+  [ $? -eq 2 ]
 }
 
 _fm_decision_fold_line() {  # <open-set> <status-line> <resolve-verb> <held-verb> <kind> <status-file>
@@ -668,7 +671,6 @@ _fm_decision_fold_line() {  # <open-set> <status-line> <resolve-verb> <held-verb
         return 0
       fi
       note=$(status_line_note "$line")
-      note=$(_fm_pending_reply_open_note "$f" "$key" "$note")
       open=$(_fm_decision_drop "$open" "$key")
       [ -n "$open" ] && open="${open}"$'\n'
       open="${open}${key}"$'\t'"${verb}"$'\t'"${note}"$'\n'
@@ -1891,12 +1893,6 @@ _fm_status_open_decision_origins() {  # <status-file> [<kind>]
     key=$(_fm_decision_key "$line") || { open=$after; continue; }
     verb=$(status_line_verb "$line")
     note=$(status_line_note "$line")
-    # The fold appends its own diagnostic to the note it stores whenever a
-    # pending-reply record could not be read, so compare the origin against that stored
-    # row rather than the raw line. A pending-reply decision kept open on an
-    # undecidable read is still exactly this line's origin; losing the match would make
-    # a blocked first-cycle signal look like it never opened at all.
-    note=$(_fm_pending_reply_open_note "$f" "$key" "$note")
     case "$verb" in
       needs-decision|blocked)
         if _fm_open_set_has "$after" "$key" \

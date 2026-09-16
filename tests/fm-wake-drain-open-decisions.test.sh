@@ -10,6 +10,10 @@ set -u
 
 # shellcheck source=tests/wake-helpers.sh
 . "$(dirname "${BASH_SOURCE[0]}")/wake-helpers.sh"
+# The fold under test is the library's own; this suite drives it both through a real drain
+# subprocess and directly, so the predicates must be in scope here as well.
+# shellcheck source=bin/fm-classify-lib.sh
+. "$ROOT/bin/fm-classify-lib.sh"
 
 DRAIN="$ROOT/bin/fm-wake-drain.sh"
 
@@ -215,6 +219,88 @@ test_over_long_decision_note_is_capped_with_a_marker() {
   pass "an over-long open decision is cut to its per-item budget with the shared truncation marker"
 }
 
+# The card's own foundation: full and cursor-backed folds must never disagree about WHICH
+# decisions are open, even when one of them cannot be decided from records. Uncertainty is a
+# property of the moment it is spoken, so it may change what a drain prints but never what the
+# two strategies hold.
+# The card's own foundation: full and cursor-backed folds must never disagree about WHICH
+# decisions are open, even when one cannot be decided from records. Uncertainty is a property
+# of the moment it is spoken, so it may change what a drain prints but never what either
+# strategy holds. A record reached through a symlink is the undecided shape used here, since
+# that is what actually happens when a foreign object is planted at the owner's path.
+test_undecidable_key_keeps_both_folds_in_agreement() {
+  local dir state corr status full incr
+  dir=$(make_case undecidable-fold-agreement)
+  state="$dir/state"
+  corr=abcdef0123456789
+  mkdir -p "$state/pending-replies"
+  printf 'phase=escalated\n' > "$state/pending-replies/$corr"
+  status="$state/task10.status"
+  printf 'blocked [key=pending-reply-%s]: pending-reply-missed: task=task10 pending-reply-id=%s request=agree\n' \
+    "$corr" "$corr" > "$status"
+
+  # Live record: both readers agree and both hold the key.
+  full=$(status_open_decisions "$status")
+  incr=$(status_open_decisions_incremental "$status")
+  [ "$full" = "$incr" ] || fail "live-record folds disagreed: '$full' vs '$incr'"
+  printf '%s' "$full" | grep -F "pending-reply-$corr" >/dev/null \
+    || fail "a live pending record did not keep its decision open"
+
+  # Now make the record undecided by planting a foreign object behind a symlink at its path.
+  mv "$state/pending-replies/$corr" "$dir/foreign-record"
+  ln -s "$dir/foreign-record" "$state/pending-replies/$corr"
+  full=$(status_open_decisions "$status")
+  incr=$(status_open_decisions_incremental "$status")
+  [ "$full" = "$incr" ] \
+    || fail "the full and cursor-backed folds disagreed about an undecided key: '$full' vs '$incr'"
+  printf '%s' "$full" | grep -F "pending-reply-$corr" >/dev/null \
+    || fail "an undecided pending key dropped out of membership: '$full'"
+  status_decision_record_undecidable "$status" "pending-reply-$corr" \
+    || fail "a symlinked record did not read as undecided"
+
+  # Appending history keeps them agreeing: rows are re-derived, never decorated.
+  printf 'working: routine progress\n' >> "$status"
+  full=$(status_open_decisions "$status")
+  incr=$(status_open_decisions_incremental "$status")
+  [ "$full" = "$incr" ] || fail "appended history made the two folds disagree: '$full' vs '$incr'"
+  pass "full and cursor-backed folds agree on an undecided pending key across appends"
+}
+
+# Presentation carries the uncertainty, once per episode, and stops the moment it can decide.
+test_undecidable_note_is_presented_once_per_episode() {
+  local dir state out corr marker
+  dir=$(make_case undecidable-presentation)
+  state="$dir/state"
+  out="$dir/drain.out"
+  corr=abcdef0123456789
+  mkdir -p "$state/pending-replies"
+  printf 'blocked [key=pending-reply-%s]: pending-reply-missed: task=task11 pending-reply-id=%s request=say it once\n' \
+    "$corr" "$corr" > "$state/task11.status"
+  # Silence here would be indistinguishable from "nothing is open", so this case pins both
+  # halves: the row shows up, and only its presentation carries the caveat.
+  marker="$state/.open-decision-undecidable-task11-pending-reply-$corr"
+
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" || fail "drain failed on an undecided decision"
+  grep -F '[record-unreadable]' "$out" >/dev/null \
+    || fail "an undecided open decision printed without naming it: $(cat "$out")"
+  [ -f "$marker" ] || fail "the first notice published no episode marker"
+
+  # Second drain inside the same episode: still open, still printed, but NOT re-labelled.
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" || fail "second drain failed"
+  grep -F 'OPEN DECISIONS' "$out" >/dev/null \
+    || fail "an open undecided decision stopped being reported on the second drain"
+  note_count=$(grep -c '\[record-unreadable\]' "$out" || true)
+  [ "$note_count" -eq 0 ] \
+    || fail "the same undecided episode was announced twice: $(cat "$out")"
+
+  # Once the record exists again the episode ends, the marker clears, and a later onset
+  # would be free to say so afresh.
+  printf 'phase=escalated\n' > "$state/pending-replies/$corr"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" || fail "drain failed after the record returned"
+  [ ! -e "$marker" ] || fail "a decidable open decision kept its uncertainty marker"
+  pass "uncertainty is announced once per episode and cleared as soon as it can be decided"
+}
+
 test_buried_decision_still_surfaces
 test_over_long_decision_note_is_capped_with_a_marker
 test_explicit_resolution_closes_it
@@ -224,3 +310,5 @@ test_no_open_decisions_prints_nothing
 test_open_decision_surfaces_even_with_an_unrelated_queued_wake
 test_buried_decision_surfaces_on_the_empty_queue_fast_path
 test_status_symlink_is_not_followed
+test_undecidable_key_keeps_both_folds_in_agreement
+test_undecidable_note_is_presented_once_per_episode

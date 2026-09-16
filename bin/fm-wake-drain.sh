@@ -441,6 +441,39 @@ EOF
 # fm-classify-lib.sh's "incremental (cursor-backed) open-decisions fold").
 # Bounded and silent: prints nothing when no decision is open, which is the
 # common case.
+# Episode markers for the render-time uncertainty note. An episode is one continuous run of
+# drains in which the same task-key could not be decided: the first such drain says so, every
+# later one stays silent, and a drain that CAN decide clears the marker so a fresh onset
+# alarms again. Plain per-task-key files under STATE, created only on the undecided path, so
+# the overwhelmingly common decidable case writes nothing at all.
+# Record a presentation-time notice for one continuous undecided episode. Returns 0 only when
+# this drain was the one that opened the episode, so a caller that must stay silent after the
+# first announcement can branch on it; the marker itself exists for the whole episode and is
+# removed by the reset helper as soon as the decision becomes decidable again.
+_open_decisions_undecidable_note() {  # <task> <key> -> 0 on the episode's first notice
+  local task=$1 key=$2 marker tmp
+  case "$task$key" in ''|*[!A-Za-z0-9._-]*) return 1 ;; esac
+  marker="$STATE/.open-decision-undecidable-$task-$key"
+  if [ -e "$marker" ] || [ -L "$marker" ]; then
+    return 1
+  fi
+  tmp=$(mktemp "$STATE/.open-decision-undecidable.XXXXXX") || return 1
+  if ! printf '%s\n' "$key" > "$tmp" || ! chmod 0600 "$tmp" \
+    || ! mv -f "$tmp" "$marker"; then
+    rm -f -- "$tmp"
+    return 1
+  fi
+  return 0
+}
+
+_open_decisions_undecidable_reset() {  # <task> <key>
+  local task=$1 key=$2 marker
+  case "$task$key" in ''|*[!A-Za-z0-9._-]*) return 0 ;; esac
+  marker="$STATE/.open-decision-undecidable-$task-$key"
+  [ -e "$marker" ] || [ -L "$marker" ] || return 0
+  rm -f -- "$marker"
+}
+
 print_open_decisions_section() {
   local snapshot=${1:-} open task key verb note line item_bytes=220 global_bytes=4000
   local output='' used=0 shown=0 omitted=0 bytes
@@ -456,7 +489,22 @@ print_open_decisions_section() {
     [ -n "$task" ] || continue
     line="$task"
     [ "$key" = default ] || line="$line [key=$key]"
-    line="$line $verb: $note"
+    # Uncertainty is rendered here, never stored: the open set above comes from a fold
+    # whose full and cursor-backed strategies must agree byte-for-byte on membership, so
+    # the question "can this decision's record be read right now?" is re-asked at the
+    # moment of speaking. The label appears only on the drain that OPENS the episode - the
+    # marker is the dedup credential - while the decision keeps being listed for as long as
+    # it stays open, exactly like any other open row.
+    caveat=''
+    if status_decision_record_undecidable "$STATE/$task.status" "$key"; then
+      # Announced once per episode, then silent until the decision becomes decidable and
+      # a fresh onset can alarm again.
+      _open_decisions_undecidable_note "$task" "$key" \
+        && caveat=' [record-unreadable]'
+    else
+      _open_decisions_undecidable_reset "$task" "$key"
+    fi
+    line="$line $verb: $note$caveat"
     # The shared cut counts the item's own characters; the trailing newline this
     # section's global budget also pays for is this caller's, so the per-item
     # allowance passed down is one short of the cap.
