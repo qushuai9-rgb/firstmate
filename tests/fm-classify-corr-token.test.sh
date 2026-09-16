@@ -373,6 +373,15 @@ test_pending_reply_escalation_matching_is_unaffected() {
   # The reserved namespace may only be opened by a note speaking its vocabulary.
   # A correlated line must not become a way around that. Each claim gets its own
   # append-only log so one drain proves both.
+  # The owner's decision has a durable record while bin/fm-pending-reply-lib.sh
+  # keeps one, and this suite tests the owner's own line, so seed it here: with no
+  # record the fold reports nothing open at all (a half-deleted record is
+  # deliberately not captain-facing state) and the owner assertion below would be
+  # vacuous. The takeover log stays record-less on purpose - a key no library owns
+  # must never surface, whatever verb its writer used.
+  mkdir -p "$state/pending-replies"
+  printf 'schema=fm-pending-reply.v1\ncorr_id=%s\nphase=escalated\n' "$CORR" \
+    > "$state/pending-replies/$CORR"
   printf 'blocked corr=%s [key=pending-reply-%s]: unrelated note\n' "$CORR" "$CORR" \
     > "$state/task-takeover.status"
   printf 'blocked corr=%s [key=pending-reply-%s]: pending-reply-missed: task=t pending-reply-id=%s\n' \

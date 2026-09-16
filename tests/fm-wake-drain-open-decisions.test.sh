@@ -68,6 +68,13 @@ test_reserved_key_namespace_is_owned_by_its_library() {
   # local mate appends into it directly, and a remote mate's lines are mirrored
   # into it verbatim - so another writer must not be able to take that key over
   # or clear it just by naming it.
+  # The decision has a durable owner while bin/fm-pending-reply-lib.sh's record
+  # exists, so this world seeds one: without it the fold reports no open decision
+  # at all (a half-deleted record is deliberately not captain-facing state), and
+  # the assertions below would pass vacuously rather than proving ownership.
+  mkdir -p "$state/pending-replies"
+  printf 'schema=fm-pending-reply.v1\ncorr_id=abcdef0123456789\nphase=escalated\n' \
+    > "$state/pending-replies/abcdef0123456789"
   printf 'blocked [key=pending-reply-abcdef0123456789]: pending-reply-missed: task=ios pending-reply-id=abcdef0123456789 request=ship it\n' > "$state/task9.status"
   printf 'blocked [key=pending-reply-abcdef0123456789]: shipping is blocked on infra\n' >> "$state/task9.status"
   printf 'resolved [key=pending-reply-abcdef0123456789]: all good now\n' >> "$state/task9.status"
