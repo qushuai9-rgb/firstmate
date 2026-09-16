@@ -1576,15 +1576,118 @@ test_expiry_recovers_when_marker_publish_is_interrupted() {
   pass "expiry remains ownerless and self-heals after marker publication interruption"
 }
 
-test_deleted_pending_record_does_not_replay_open_decision() {
-  local home state corr status
-  home=$(setup_parent deleted-record-fold)
+# Ruling 8: condition 2 proven through the owner's own retirement trail. A bare `rm` of a
+# record that never existed proves nothing, so this walks create -> deliver -> escalate ->
+# confirm -> reclaim and asserts the key is open while the record lives and closed once the
+# marker and audit copy exist.
+test_retired_pending_record_does_not_replay_open_decision() {
+  local home state corr status rec expired_dir marker
+  home=$(setup_parent retired-record-fold)
   state="$home/state"
-  corr=abcdef0123456789
+  export FM_PENDING_REPLY_NOW=10000
+  corr=$(fm_pending_reply_create "$home" "$state" hibit "retired then replayed")
+  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_mark_delivered "$state" "$corr" || fail "could not mark delivery"
+  fm_pending_reply_set "$rec" phase escalated || fail "could not seed escalation"
+  fm_pending_reply_set "$rec" recovery_delivery_outcome confirmed || fail "could not set outcome"
+  fm_pending_reply_set "$rec" recovery_turn_completed_epoch 10000 || fail "could not set turn epoch"
   status="$state/hibit.status"
-  printf 'blocked [key=pending-reply-%s]: pending-reply-missed: task=hibit pending-reply-id=%s request=deleted\n' "$corr" "$corr" > "$status"
-  [ -z "$(status_open_decisions "$status")" ] || fail "a deleted pending record was replayed as an open decision"
-  pass "deleted pending records do not reappear in OPEN DECISIONS"
+  printf 'blocked [key=pending-reply-%s]: pending-reply-missed: task=hibit pending-reply-id=%s request=retired then replayed\n' \
+    "$corr" "$corr" > "$status"
+  [ -n "$(status_open_decisions "$status")" ] \
+    || fail "a live pending record did not keep its decision open"
+  export FM_PENDING_REPLY_NOW=10121
+  fm_pending_reply_tick "$state" || fail "expiry tick failed"
+  expired_dir="$(fm_pending_reply_dir "$state")/expired"
+  marker=$(fm_pending_reply_expired_marker_path "$state" "$corr")
+  [ ! -f "$rec" ] || fail "expired pending reply remained in the hot directory"
+  [ -f "$expired_dir/$corr" ] || fail "expired record was not retained for audit"
+  [ -f "$marker" ] || fail "retirement published no expiry marker"
+  [ -z "$(status_open_decisions "$status")" ] \
+    || fail "a retired pending record was replayed as an open decision"
+  pass "a pending record retired through its owner's lifecycle stops owning an OPEN DECISIONS key"
+}
+
+# Ruling 8: condition 3 from the opposite side. No record and no retirement trail must stay
+# visible and name its uncertainty, because silence is not evidence that a mate's escalation
+# stopped existing. The vocabulary guard is asserted in the same case so staying open on
+# uncertainty cannot become a way for any other writer to raise the key.
+test_recordless_pending_key_stays_open_and_reports_undecidable() {
+  local home state corr status open
+  home=$(setup_parent recordless-key-fold)
+  state="$home/state"
+  corr=feedface0123456789
+  mkdir -p "$(fm_pending_reply_dir "$state")"
+  status="$state/hibit.status"
+  printf 'blocked [key=pending-reply-%s]: pending-reply-missed: task=hibit pending-reply-id=%s request=no record ever\n' \
+    "$corr" "$corr" > "$status"
+  open=$(status_open_decisions "$status")
+  printf '%s' "$open" | grep -F "pending-reply-$corr" >/dev/null \
+    || fail "a recordless pending key was suppressed instead of staying open: '$open'"
+  case "$open" in
+    *'[pending-reply-record-undecidable]'*) : ;;
+    *) fail "a recordless pending key stayed open without naming its uncertainty: '$open'" ;;
+  esac
+  printf 'blocked [key=pending-reply-%s]: somebody else%s note\n' "$corr" "'" > "$state/other.status"
+  open=$(status_open_decisions "$state/other.status")
+  [ -z "$open" ] || fail "a foreign note opened a reserved key: '$open'"
+  pass "recordless pending keys stay open, name their uncertainty, and reject foreign notes"
+}
+
+test_symlinked_pending_record_is_not_owned_or_expired() {
+  local home state corr rec external status
+  home=$(setup_parent symlinked-pending-record)
+  state="$home/state"
+  export FM_PENDING_REPLY_NOW=10500
+  corr=$(fm_pending_reply_create "$home" "$state" hibit "symlink ownership")
+  rec=$(fm_pending_reply_path "$state" "$corr")
+  external="$home/external-record"
+  mv "$rec" "$external" || fail "could not move record fixture"
+  fm_pending_reply_set "$external" phase escalated || fail "could not seed escalated fixture"
+  fm_pending_reply_set "$external" recovery_delivery_outcome confirmed || fail "could not seed delivery outcome"
+  fm_pending_reply_set "$external" recovery_turn_completed_epoch 10500 || fail "could not seed completion"
+  ln -s "$external" "$rec" || fail "could not create record symlink"
+  status="$state/hibit.status"
+  printf 'blocked [key=pending-reply-%s]: pending-reply-missed: task=hibit pending-reply-id=%s request=symlink ownership\n' \
+    "$corr" "$corr" > "$status"
+  [ -z "$(status_open_decisions "$status")" ] || fail "a symlinked record must not own an open decision"
+  export FM_PENDING_REPLY_NOW=10600
+  fm_pending_reply_tick "$state" || fail "tick failed on a symlinked record"
+  [ -L "$rec" ] || fail "tick should not retire a symlinked live record"
+  [ "$(fm_pending_reply_get "$external" phase)" = escalated ] || fail "tick followed a symlinked record"
+  pass "symlinked pending records are not owned or expired"
+}
+
+# A record reached through a symlink is not the owner's record: the classifier must not read
+# through it, and the owning library must not retire or rewrite what lies behind it.
+test_symlinked_pending_record_is_not_owned_or_expired() {
+  local home state corr rec external status
+  home=$(setup_parent symlinked-pending-record)
+  state="$home/state"
+  export FM_PENDING_REPLY_NOW=10500
+  corr=$(fm_pending_reply_create "$home" "$state" hibit "symlink ownership")
+  rec=$(fm_pending_reply_path "$state" "$corr")
+  external="$home/external-record"
+  mv "$rec" "$external" || fail "could not move record fixture"
+  fm_pending_reply_set "$external" phase escalated || fail "could not seed escalated fixture"
+  fm_pending_reply_set "$external" recovery_delivery_outcome confirmed || fail "could not seed delivery outcome"
+  fm_pending_reply_set "$external" recovery_turn_completed_epoch 10500 || fail "could not seed completion"
+  ln -s "$external" "$rec" || fail "could not create record symlink"
+  status="$state/hibit.status"
+  printf 'blocked [key=pending-reply-%s]: pending-reply-missed: task=hibit pending-reply-id=%s request=symlink ownership\n' \
+    "$corr" "$corr" > "$status"
+  # Undecided, never absent: a symlinked record keeps its decision visible rather than
+  # letting an object the owner never wrote either own or retire it.
+  open=$(status_open_decisions "$status")
+  case "$open" in
+    *'[pending-reply-record-undecidable]'*) : ;;
+    *) fail "a symlinked record did not stay visible as undecidable: '$open'" ;;
+  esac
+  export FM_PENDING_REPLY_NOW=10600
+  fm_pending_reply_tick "$state" || fail "tick failed on a symlinked record"
+  [ -L "$rec" ] || fail "tick should not retire a symlinked live record"
+  [ "$(fm_pending_reply_get "$external" phase)" = escalated ] || fail "tick followed a symlinked record"
+  pass "symlinked pending records are neither owned nor expired"
 }
 
 test_escalated_undelivered_correlation_stays_retryable() {
@@ -1688,6 +1791,7 @@ test_expired_phase_residue_is_reclaimed_on_tick
 test_expiry_recovers_when_marker_publish_is_interrupted
 test_retired_pending_record_does_not_replay_open_decision
 test_recordless_pending_key_stays_open_and_reports_undecidable
+test_symlinked_pending_record_is_not_owned_or_expired
 test_remote_repost_waits_for_the_reply_channel
 test_mirrored_remote_reply_never_triggers_a_repost
 test_same_basename_self_home_corr_resolves_on_tick
