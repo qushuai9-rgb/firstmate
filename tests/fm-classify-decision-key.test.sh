@@ -239,6 +239,21 @@ test_blocked_and_resolved_are_tag_order_independent() {
   pass "blocked/resolved parse their bare verb with any bracket-tag order preceding the colon"
 }
 
+test_relative_status_path_keeps_pending_reply_owner_visible() {
+  local dir status corr result
+  dir=$(case_dir relative-pending-reply)
+  status="$dir/task.status"
+  corr=1234567890abcdef
+  mkdir -p "$dir/pending-replies"
+  printf 'phase=escalated\n' > "$dir/pending-replies/$corr"
+  printf 'blocked [key=pending-reply-%s]: pending-reply-missed: task=task pending-reply-id=%s request=finish report\n' \
+    "$corr" "$corr" > "$status"
+  result=$(cd "$dir" && status_open_decisions task.status)
+  [ "$result" = "$(printf 'pending-reply-%s\tblocked\tpending-reply-missed: task=task pending-reply-id=%s request=finish report\n' "$corr" "$corr")" ] \
+    || fail "a relative status path lost its sibling pending-reply owner: '$result'"
+  pass "relative status paths retain pending-reply ownership during open-decision folding"
+}
+
 test_status_span_blocked_pending_reply_first_cycle_is_safe() {
   local dir status corr result rc
   dir=$(case_dir span-pending-reply)
@@ -284,6 +299,7 @@ test_incremental_agrees_with_full_fold_across_appends() {
   pass "the incremental fold matches the full fold across appends in both key positions"
 }
 
+test_relative_status_path_keeps_pending_reply_owner_visible
 test_stated_key_is_honored_in_both_positions
 test_bare_keyless_line_still_folds_to_default
 test_resolution_closes_across_positions

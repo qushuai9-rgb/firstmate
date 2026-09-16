@@ -272,6 +272,29 @@ test_secondmate_empty_or_declared_idle_queue_stays_silent() {
   pass "empty and explicitly idle secondmate queues suppress wake-loop stall noise"
 }
 
+test_secondmate_unsafe_queue_is_not_treated_as_empty() {
+  local dir state sub outside out rc
+  dir=$(make_case secondmate-unsafe-queue)
+  state="$dir/state"; sub="$dir/secondmate"; outside="$dir/outside.queue"
+  mkdir -p "$sub/state"
+  printf 'mate\n' > "$sub/.fm-secondmate-home"
+  printf 'window=firstmate:fm-mate\nkind=secondmate\nhome=%s\n' "$sub" > "$state/mate.meta"
+  printf '100\t7\tcheck\trouted\tcheck: expected work\n' > "$outside"
+  ln -s "$outside" "$sub/state/.wake-queue"
+  rc=0
+  FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
+    bash -c '. "$1"; secondmate_no_expected_work "$2" mate' _ "$ROOT/bin/fm-watch.sh" "$sub" \
+    || rc=$?
+  [ "$rc" -ne 0 ] || fail "a rejected queue symlink was treated as no expected work"
+  rc=0
+  out=$(FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
+    bash -c '. "$1"; secondmate_wake_stall_tick' _ "$ROOT/bin/fm-watch.sh" 2>"$dir/tick.err") \
+    || rc=$?
+  [ "$rc" -ne 0 ] || fail "wake-stall observation silently accepted an unsafe queue"
+  [ -z "$out" ] || fail "unsafe queue produced a misleading stall wake: $out"
+  pass "unsafe secondmate queues fail closed instead of suppressing supervision"
+}
+
 test_secondmate_foreign_queue_stall_tracks_progress_and_alerts_once() {
   local dir state sub fakebin out row_before row_after stall_count real_date
   dir=$(make_case secondmate-foreign-stall)
@@ -2026,6 +2049,7 @@ test_bounded_lock_handoff_after_contention
 test_live_presentation_holder_is_deadlined_without_weakening_ack
 test_malformed_presentation_lock_reports_acquire_failure
 test_secondmate_empty_or_declared_idle_queue_stays_silent
+test_secondmate_unsafe_queue_is_not_treated_as_empty
 test_secondmate_foreign_queue_stall_tracks_progress_and_alerts_once
 test_secondmate_declared_pause_rows_do_not_feed_stall_escalation
 test_secondmate_reprovisioned_queue_starts_a_fresh_interval

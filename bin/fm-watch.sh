@@ -773,28 +773,46 @@ secondmate_declared_idle() {  # <secondmate-home> <task-id>
 
 secondmate_oldest_queue_row() {  # <queue-path>
   local queue=$1
-  [ -f "$queue" ] && [ ! -L "$queue" ] || return 0
+  if [ -L "$queue" ] || { [ -e "$queue" ] && { [ ! -f "$queue" ] || [ ! -r "$queue" ]; }; }; then
+    return 2
+  fi
+  [ -e "$queue" ] || return 1
   awk -F '\t' '
     function declared_external_pause(kind, payload) {
       return kind == "stale" \
         && payload ~ /^stale: .*\(paused [0-9]+s, awaiting external - declared (pause,|paused\))/
     }
-    NF >= 5 && $1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ \
-      && !declared_external_pause($3, $5) {
+    NF == 0 { next }
+    NF < 5 || $1 !~ /^[0-9]+$/ || $2 !~ /^[0-9]+$/ || $3 !~ /^(signal|stale|check|heartbeat)$/ || $4 == "" {
+      invalid = 1
+      next
+    }
+    !declared_external_pause($3, $5) {
       if (!found || $2 < seq) {
         found = 1
         seq = $2
         row = $0
       }
     }
-    END { if (found) print row }
-  ' "$queue" 2>/dev/null || true
+    END {
+      if (invalid) exit 2
+      if (found) print row
+      else exit 1
+    }
+  ' "$queue" 2>/dev/null
 }
 
 secondmate_no_expected_work() {  # <secondmate-home> <task-id>
-  local home=$1 task=$2
-  [ -z "$(secondmate_oldest_queue_row "$home/state/.wake-queue")" ] \
-    || secondmate_declared_idle "$home" "$task"
+  local home=$1 task=$2 row queue queue_rc
+  queue="$home/state/.wake-queue"
+  row=$(secondmate_oldest_queue_row "$queue")
+  queue_rc=$?
+  case "$queue_rc" in
+    2) return 1 ;;
+    0) secondmate_declared_idle "$home" "$task" || return 1 ;;
+    1) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 # 0 iff <task> is demonstrably inside an active turn, through the watcher's own
@@ -833,7 +851,7 @@ secondmate_in_active_turn() {  # <window> <idle>
 # foreign queue.
 secondmate_wake_stall_tick() {
   local now=$(( $(date +%s) )) threshold=$SECONDMATE_WAKE_STALL_SECS
-  local meta task kind remote_host home queue row epoch seq row_key marker progress_marker progress observed_at observed_key
+  local meta task kind remote_host home queue row queue_rc epoch seq row_key marker progress_marker progress observed_at observed_key
   local receipt receipt_dir notify_key queued idle reason episode_alerted
   # Endpoint metadata admits this queue-loop check; secondmate-liveness owns registered mates whose endpoint is missing or dead.
   for meta in "$STATE"/*.meta; do
@@ -851,6 +869,11 @@ secondmate_wake_stall_tick() {
     [ "$(cat "$home/.fm-secondmate-home" 2>/dev/null || true)" = "$task" ] || continue
     queue="$home/state/.wake-queue"
     row=$(secondmate_oldest_queue_row "$queue")
+    queue_rc=$?
+    case "$queue_rc" in
+      0|1) ;;
+      *) return 1 ;;
+    esac
     marker="$STATE/.secondmate-wake-stall-$task"
     progress_marker="$STATE/.secondmate-wake-progress-$task"
     receipt_dir="$STATE/.secondmate-wake-stall-receipts/$task"
