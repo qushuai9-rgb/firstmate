@@ -83,6 +83,11 @@ anything in this card. Confirmed non-overlapping.
   suppression decision rather than keeping two gates. I will report the observed verdict
   pair before deleting either.
 
+- **Proposed resolution (needs your approval)**: after porting, run both paths against a
+  single fixture that declares a wait *and* an idle marker, and choose one owner for the
+  suppression decision rather than keeping two gates. I will report the observed verdict
+  pair before deleting either.
+
 <<<<<<< HEAD
 <<<<<<< HEAD
 =======
@@ -109,10 +114,14 @@ The three-way experiment was run per the ruling. It **disconfirmed my own premis
 
 ### S2-followup — my wake-stall idle gate is unreachable (dead code)
 <<<<<<< HEAD
+<<<<<<< HEAD
 `secondmate_expectation_absent` is only consulted *after* the tick has already selected an
 =======
 `secondmate_no_expected_work` is only consulted *after* the tick has already selected an
 >>>>>>> 71c12d74 (docs: record that the wake-stall idle gate never reaches a verdict)
+=======
+`secondmate_expectation_absent` is only consulted *after* the tick has already selected an
+>>>>>>> 0533300a (docs: name the helpers correctly and settle what D4 still owes)
 actionable oldest row. But its empty-queue case returns "nothing expected" precisely when
 that row is absent, and its idle case reads `$home/state/$task.status`, which nothing ever
 writes for a queued-but-not-yet-spawned mate. So on the wake-loop-stall path my tri-state
@@ -133,6 +142,9 @@ whether the idle-lapse tick consumes upstream's declared-wait predicate rather t
 own.
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 0533300a (docs: name the helpers correctly and settle what D4 still owes)
 ### S2 OBSERVATION RECORD (cond1, requested as auditable evidence)
 
 Naming note: this file previously referred to the two helpers by names other than their
@@ -195,10 +207,13 @@ exists only on this branch (`idle_lapse` → 0 hits in `origin/main:bin/fm-watch
 does consult it before deciding to alert. So the deletion is scoped to the wake-stall call
 site, and D4(a)'s real content lives in the idle-lapse tick.
 
+<<<<<<< HEAD
 =======
 >>>>>>> ccf282db (docs: attach the secondmate runtime-state reconcile table to the branch)
 =======
 >>>>>>> 71c12d74 (docs: record that the wake-stall idle gate never reaches a verdict)
+=======
+>>>>>>> 0533300a (docs: name the helpers correctly and settle what D4 still owes)
 ## Part 4 — Explicitly out of scope
 - FM-020 (enforced inbox drainer) — captain ruled follow-up; must not enter this PR.
 - `tests/fm-secondmate-safety.test.sh` — untouched since `main`; not restored here.
@@ -215,6 +230,9 @@ site, and D4(a)'s real content lives in the idle-lapse tick.
    the PR URL, with real test runs and pass counts.
 5. This repo has CI; do not apply any "zero workflows" assumption from other projects.
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 0533300a (docs: name the helpers correctly and settle what D4 still owes)
 
 ## Cond2 — D4 remaining scope, decided against live upstream code
 
@@ -250,6 +268,7 @@ matcher exists there at all. Port as-is.
    selection cannot pre-empt it: undecidable keeps the alarm armed and publishes one notice.
 3. Port the provider matcher unchanged.
 4. Report D4(a) and D4(b) as still-open-and-fixed-by-this-branch, never as upstream-covered.
+<<<<<<< HEAD
 
 ## Conflict rulings log (explicit, per file and key)
 
@@ -514,3 +533,5 @@ the discarded designs. Nothing force-pushed, stashed, or discarded; replay conti
 `6a392c8a`.
 =======
 >>>>>>> ccf282db (docs: attach the secondmate runtime-state reconcile table to the branch)
+=======
+>>>>>>> 0533300a (docs: name the helpers correctly and settle what D4 still owes)
