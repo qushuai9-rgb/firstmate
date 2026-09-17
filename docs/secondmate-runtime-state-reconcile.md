@@ -68,17 +68,26 @@ anything in this card. Confirmed non-overlapping.
 
 ### S2 — Idle suppression vs upstream's declared-wait handling
 - Upstream `b430bf50` *honour a declared wait before wedge-escalating a quiet pane* adds
+<<<<<<< HEAD
   declared-wait logic to the watcher; my `secondmate_self_declared_idle` adds a parallel
   tri-state gate for the same "should this alert fire" question.
 - They are adjacent, not provably identical. If both fire, a pane could be suppressed by
   one path and escalated by the other depending on evaluation order.
 - **Consequences**:
   - double-handling or contradictory verdicts on the same event.
+=======
+  declared-wait logic to the watcher; my `secondmate_declared_idle` adds a parallel
+  tri-state gate for the same "should this alert fire" question.
+- They are adjacent, not provably identical. If both fire, a pane could be suppressed by
+  one path and escalated by the other depending on evaluation order.
+- **Consequences**: double-handling or contradictory verdicts on the same event.
+>>>>>>> ccf282db (docs: attach the secondmate runtime-state reconcile table to the branch)
 - **Proposed resolution (needs your approval)**: after porting, run both paths against a
   single fixture that declares a wait *and* an idle marker, and choose one owner for the
   suppression decision rather than keeping two gates. I will report the observed verdict
   pair before deleting either.
 
+<<<<<<< HEAD
 #### S2 OBSERVATION RESULT (measured, supersedes the proposal above)
 The three-way experiment was run per the ruling. It **disconfirmed my own premise**.
 
@@ -182,6 +191,8 @@ exists only on this branch (`idle_lapse` → 0 hits in `origin/main:bin/fm-watch
 does consult it before deciding to alert. So the deletion is scoped to the wake-stall call
 site, and D4(a)'s real content lives in the idle-lapse tick.
 
+=======
+>>>>>>> ccf282db (docs: attach the secondmate runtime-state reconcile table to the branch)
 ## Part 4 — Explicitly out of scope
 - FM-020 (enforced inbox drainer) — captain ruled follow-up; must not enter this PR.
 - `tests/fm-secondmate-safety.test.sh` — untouched since `main`; not restored here.
@@ -197,6 +208,7 @@ site, and D4(a)'s real content lives in the idle-lapse tick.
 4. After rebase: rerun the full pipeline review→test→document→lint→push→pr and report
    the PR URL, with real test runs and pass counts.
 5. This repo has CI; do not apply any "zero workflows" assumption from other projects.
+<<<<<<< HEAD
 
 ## Cond2 — D4 remaining scope, decided against live upstream code
 
@@ -494,3 +506,5 @@ Counts after ruling 9, run for real: `fm-pending-reply` **46/0**, `fm-wake-drain
 `fm-classify-decision-key` (#3753's batch) **18/0**. FM-018's old comments carry no pointer to
 the discarded designs. Nothing force-pushed, stashed, or discarded; replay continues from
 `6a392c8a`.
+=======
+>>>>>>> ccf282db (docs: attach the secondmate runtime-state reconcile table to the branch)
