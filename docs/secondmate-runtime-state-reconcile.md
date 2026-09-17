@@ -68,7 +68,6 @@ anything in this card. Confirmed non-overlapping.
 
 ### S2 — Idle suppression vs upstream's declared-wait handling
 - Upstream `b430bf50` *honour a declared wait before wedge-escalating a quiet pane* adds
-<<<<<<< HEAD
   declared-wait logic to the watcher; my `secondmate_self_declared_idle` adds a parallel
   tri-state gate for the same "should this alert fire" question.
 - They are adjacent, not provably identical. If both fire, a pane could be suppressed by
@@ -76,18 +75,18 @@ anything in this card. Confirmed non-overlapping.
 - **Consequences**:
   - double-handling or contradictory verdicts on the same event.
 =======
-  declared-wait logic to the watcher; my `secondmate_declared_idle` adds a parallel
-  tri-state gate for the same "should this alert fire" question.
-- They are adjacent, not provably identical. If both fire, a pane could be suppressed by
-  one path and escalated by the other depending on evaluation order.
-- **Consequences**: double-handling or contradictory verdicts on the same event.
->>>>>>> ccf282db (docs: attach the secondmate runtime-state reconcile table to the branch)
+- **Consequences**:
+  - double-handling or contradictory verdicts on the same event.
+>>>>>>> 71c12d74 (docs: record that the wake-stall idle gate never reaches a verdict)
 - **Proposed resolution (needs your approval)**: after porting, run both paths against a
   single fixture that declares a wait *and* an idle marker, and choose one owner for the
   suppression decision rather than keeping two gates. I will report the observed verdict
   pair before deleting either.
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 71c12d74 (docs: record that the wake-stall idle gate never reaches a verdict)
 #### S2 OBSERVATION RESULT (measured, supersedes the proposal above)
 The three-way experiment was run per the ruling. It **disconfirmed my own premise**.
 
@@ -109,7 +108,11 @@ The three-way experiment was run per the ruling. It **disconfirmed my own premis
   explains why — see S2-below.
 
 ### S2-followup — my wake-stall idle gate is unreachable (dead code)
+<<<<<<< HEAD
 `secondmate_expectation_absent` is only consulted *after* the tick has already selected an
+=======
+`secondmate_no_expected_work` is only consulted *after* the tick has already selected an
+>>>>>>> 71c12d74 (docs: record that the wake-stall idle gate never reaches a verdict)
 actionable oldest row. But its empty-queue case returns "nothing expected" precisely when
 that row is absent, and its idle case reads `$home/state/$task.status`, which nothing ever
 writes for a queued-but-not-yet-spawned mate. So on the wake-loop-stall path my tri-state
@@ -129,6 +132,7 @@ This needs a ruling: delete the dead wake-stall gate (shrinking my D4 diff), and
 whether the idle-lapse tick consumes upstream's declared-wait predicate rather than its
 own.
 
+<<<<<<< HEAD
 ### S2 OBSERVATION RECORD (cond1, requested as auditable evidence)
 
 Naming note: this file previously referred to the two helpers by names other than their
@@ -193,6 +197,8 @@ site, and D4(a)'s real content lives in the idle-lapse tick.
 
 =======
 >>>>>>> ccf282db (docs: attach the secondmate runtime-state reconcile table to the branch)
+=======
+>>>>>>> 71c12d74 (docs: record that the wake-stall idle gate never reaches a verdict)
 ## Part 4 — Explicitly out of scope
 - FM-020 (enforced inbox drainer) — captain ruled follow-up; must not enter this PR.
 - `tests/fm-secondmate-safety.test.sh` — untouched since `main`; not restored here.
