@@ -725,3 +725,22 @@ Counts after that fix, run twice for stability: `fm-wake-queue` **45 pass / 0 fa
 `fm-watch-triage` **130/0**, `fm-pending-reply` **46/0**, `corr-token` **12/0**, #3753
 `decision-key` **18/0**, `wake-drain-open-decisions` **11/0**. The earlier "fixture shape" claim
 stays retracted above; the real defect was this producer gap, and it was mine.
+
+## Provider-path evidence for the three interrupted runs (environment, not code)
+Recorded so a later reader does not conclude "just retry it" without knowing what already was
+tried. All three failures came from the pipeline's Pi agent path; none produced a code defect,
+and each left its commits intact. Times are local, read from `~/.no-mistakes/logs/daemon.log` and
+each run's `review.log`.
+
+| # | run id | step | time | error text as logged |
+|---|---|---|---|---|
+| 1 | `01M2MM9K7F6NF8GGQ5T35458DN` | rebase (conflict resolve) | 2026-09-16 16:13 | `pi reported error: Our servers are currently overloaded. Please try again later.` |
+| 2 | `01M2SD3NM1NPEYA47WMBZAFMZB` | review (agent fix, round after R16-R18) | 2026-09-18 14:29 | `pi reported error: Upstream response stream was interrupted` |
+| 3 | `01M2SKNVDXNCEXXPN410WNWZ14` | review (running) | started 14:36, log silent since | no error line: process alive at **0.0% CPU** with no child and no log writes, i.e. a hung request rather than a clean refusal |
+
+Tier attribution attempted and honestly bounded: the run logs record only that the step ran on
+`pi` (`pi started pid=…`) and never name a provider or model, so this table can say the shared Pi
+agent path is the common factor - and that all three hits landed while that path was asked to do
+heavy multi-file work - but not which upstream model served them. Installed toolchain is pinned
+at v1.48.0 with v1.75.2 available; whether that matters here is untested, deliberately, because
+upgrading shared machinery mid-card is a separate decision.
