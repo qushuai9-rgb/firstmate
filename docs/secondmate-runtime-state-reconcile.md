@@ -795,6 +795,7 @@ deletion of code the task exists to add.
 | what it asked to delete | REVIEW-001: `secondmate_provider_error_tick` - pane-text provider-error classification, its markers, regex, configuration and tests. REVIEW-002: `secondmate_turn_hang_tick` - busy-turn detector, output-growth policy, confirmation ladder, stale wake, per-task configuration, documentation and tests |
 | its stated reason | neither appears in the task's listed intent criteria, so the components were called an expansion of the supervision surface |
 | disposition | **refused**; nothing removed. Rejected through the gate's supported non-destructive action only (`skip`), never by fixing toward deletion, and no implementation was edited |
+| bookkeeping status after skipping | **open decision records still remain**, so the refusal is recorded here rather than inferred from an empty queue: the two findings stayed listed as awaiting authorization even after `review` moved to skipped, which means `skip` routed the step past them instead of closing them. They are therefore not self-evidently resolved in the pipeline's own records, and the durable record of this ruling is this table plus the keyed status-log pair naming the captain's decision |
 
 Why the demand was wrong rather than merely strict: both detectors are this card's core mechanism,
 not adjacent tooling. One identifies upstream error text from rendered output and pairs it with the
