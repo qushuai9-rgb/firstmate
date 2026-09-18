@@ -573,6 +573,14 @@ SH
   chmod +x "$fakebin/tmux"
   "$ROOT/bin/fm-busy-event.sh" arm "$state" mate >/dev/null \
     || fail "could not arm the mate's busy contract"
+  # The claim this case makes is that the mate is INSIDE a running turn, and a running turn
+  # produces activity, so let the fixture say so through the same path a real harness uses:
+  # fm-busy-event.sh progress refreshes state/<id>.progress for observed native-harness
+  # activity under the armed generation. Arming alone writes no progress record, which left
+  # this scenario asserting a live turn while proving none.
+  gen=$(cat "$state/mate.busy-gen" 2>/dev/null || true)
+  "$ROOT/bin/fm-busy-event.sh" progress "$state" mate --gen "$gen" >/dev/null \
+    || fail "could not publish the mate's in-turn progress"
 
   PATH="$fakebin:$PATH" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
     FM_STATE_OVERRIDE="$state" FM_SECONDMATE_WAKE_STALL_SECS=1 FM_POLL=1 \
@@ -640,6 +648,13 @@ SH
   chmod +x "$fakebin/tmux"
   "$ROOT/bin/fm-busy-event.sh" arm "$state" mate >/dev/null \
     || fail "could not arm the mate's busy contract"
+  # This case claims a mate that is STILL inside a long-running turn, so let it say so the way a
+  # running turn actually does - through the harness-progress path that refreshes
+  # state/<id>.progress. Arming alone proves no activity, and with nothing to check the exemption
+  # had to be inferred from absence, which is the reading this card exists to remove.
+  gen=$(cat "$state/mate.busy-gen" 2>/dev/null || true)
+  "$ROOT/bin/fm-busy-event.sh" progress "$state" mate --gen "$gen" >/dev/null \
+    || fail "could not publish the mate's in-turn progress"
   # Backdate AFTER arming, so nothing the arm writes refreshes the launch record
   # this home would otherwise age the mate's turn from.
   touch -t 202001010000 "$state/mate.meta"

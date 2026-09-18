@@ -699,3 +699,29 @@ until the interval bound crosses - which restores upstream's exact weakness for 
 Counts right now: `fm-watch-triage` 130/0, `fm-pending-reply` 46/0, `corr-token` 12/0,
 #3753 `decision-key` 18/0, `wake-drain-open-decisions` 11/0 — none regressed by this change;
 `fm-wake-queue` 11/1 as described.
+
+## Marker chronology, stated once and in full (required after three rounds of seesaw)
+Every "is this task making progress" decision in `bin/fm-watch.sh` reads these files, in this
+order, against one clock. Nothing else may define turn liveness, because two definitions is what
+made the exemption and the alarm argue past each other.
+
+| file | written by | when it updates | who clears it | what it proves |
+|---|---|---|---|---|
+| `state/<id>.progress` | `bin/fm-busy-event.sh progress`, driven by observed native-harness activity inside the armed generation | on every reported activity event during a live turn | `arm` (new incarnation), `retire`, and now any `apply` transition out of busy | the mate is working **inside its current turn** |
+| `state/<id>.turn-ended` | the turn-end hook path | when a turn completes | task teardown | a turn finished; says nothing about the present |
+| `state/<id>.meta` | spawn/relaunch | on launch | teardown | when the task started - **never** a mate's turn clock |
+| `state/<id>.busy-gen` + record | `fm-busy-event.sh arm` | per incarnation | `retire` | which busy contract generation is authoritative |
+
+The third red position came from a gap in row 1, not from a threshold: `apply` wrote the new
+semantic state but never touched the progress marker, so ending a turn left fresh in-turn evidence
+standing beside an idle verdict. No reader could then tell a quiet-but-running mate from a stopped
+one without aging two artifacts against each other, which is why each attempt moved the failure
+from one direction to the other. Fixed at the producer: publishing a non-busy transition removes
+the progress record, so that marker now means exactly one thing. Both directions hold inside the
+same fixture with the launch record still deliberately backdated to 2020 (`tests/fm-wake-queue.test.sh:660`),
+so the scenario stays as harsh as designed and no assertion was softened.
+
+Counts after that fix, run twice for stability: `fm-wake-queue` **45 pass / 0 fail**,
+`fm-watch-triage` **130/0**, `fm-pending-reply` **46/0**, `corr-token` **12/0**, #3753
+`decision-key` **18/0**, `wake-drain-open-decisions` **11/0**. The earlier "fixture shape" claim
+stays retracted above; the real defect was this producer gap, and it was mine.

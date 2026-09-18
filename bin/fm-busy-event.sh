@@ -238,6 +238,20 @@ if [ -f "$REC" ]; then
       ;;
   esac
 fi
+# A turn's live-progress evidence ends with the turn. `state/<id>.progress` claims "activity was
+# observed inside the armed generation", so publishing a transition out of busy has to retire it:
+# otherwise a completed turn keeps exempting itself on evidence that predates its own end, and no
+# reader can distinguish a quiet-but-running mate from a stopped one without aging two artifacts
+# against each other. `arm` and `retire` already cleared this marker; this closes the last path
+# by which a turn ends.
+if [ "$NEW_STATE" != busy ]; then
+  rm -f "$STATE/$ID.progress" || {
+    lock_release
+    umask "$old_umask"
+    echo "error: busy-state progress cleanup failed for $ID" >&2
+    exit 1
+  }
+fi
 write_record "$GEN" $((OLD_SEQ + 1)) || {
   lock_release
   umask "$old_umask"
