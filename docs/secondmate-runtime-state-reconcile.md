@@ -759,3 +759,25 @@ Mitigation shape adopted for the retry, since the trigger is one long streamed r
 review gate findings in small batches rather than several at once, because the fix step is where
 the pipeline writes its largest single body of code, and this gateway has previously cut
 long-output generations from those two models.
+
+## Process and socket evidence from the supervision side (the shape of a stalled stream)
+The captain inspected the running pipeline while attempt 4 hung, which is what turned "retry it"
+into a tool-layer call. Recorded here with the hang times above so both halves of the evidence sit
+in one place:
+
+- daemon **pid 1566**, up **5 days** (started 2026-09-13), CPU 0.0%.
+- two review subprocesses under it, **pid 9148** (~9 min) and **pid 77569** (~5.5 min), both at
+  **CPU 0.0%**.
+- each held exactly one TCP connection, `localhost -> 127.0.0.1:7890`, in **ESTABLISHED**: the
+  socket is open and no data moves. That matches zero CPU plus a silent log precisely - a worker
+  computing would not look like this, and neither would a model that refuses.
+- a suspected zombie, **pid 1589**, was checked and cleared: it is only the log aggregator and is
+  behaving normally. Worth recording because "there is a stuck process" was the wrong hypothesis
+  and someone will raise it again.
+- installed toolchain **v1.48.0 (built 2026-08-08)** against available **v1.75.2**, on a path
+  unrestarted for five days.
+
+Ruled out by measurement rather than assumption: model tier (direct calls to the same gateway
+returned 200 with full output), and batch size (this hang occurred before the gate emitted any
+finding, so there was no long streamed reply to avoid). Decision: no third retry from the crew
+side, and tool upgrade or daemon restart belongs to the captain's side, not to this card.
