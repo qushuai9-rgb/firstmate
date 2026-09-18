@@ -744,3 +744,18 @@ agent path is the common factor - and that all three hits landed while that path
 heavy multi-file work - but not which upstream model served them. Installed toolchain is pinned
 at v1.48.0 with v1.75.2 available; whether that matters here is untested, deliberately, because
 upgrading shared machinery mid-card is a separate decision.
+
+## Why the tier is not the fault (smoke test alongside the hang times)
+The captain measured the same gateway directly while these runs were hanging, so the reading
+below is evidence rather than inference: `xhy/gpt-5.6-luna` returned **HTTP 403** on two separate
+attempts, while `bosch/qwen3.8-flash` and `bosch/glm-5.3-flash` both returned **HTTP 200** with a
+clean `end_turn` and 1,761 / 1,104 output tokens respectively. A model that answers over the same
+API path cannot also be what stalls the reviewer, which places the fault in the review
+subprocess's streaming receive - matching the observed signature exactly: **zero CPU with no log
+writes**, which real work never looks like. Recorded here so the next reader does not spend a
+cycle switching tiers, and so "just retry it" is answered with timestamps instead of opinion.
+
+Mitigation shape adopted for the retry, since the trigger is one long streamed response: feed the
+review gate findings in small batches rather than several at once, because the fix step is where
+the pipeline writes its largest single body of code, and this gateway has previously cut
+long-output generations from those two models.
