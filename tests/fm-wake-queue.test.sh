@@ -243,19 +243,29 @@ test_secondmate_empty_or_declared_idle_queue_stays_silent() {
   out=$(FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
     bash -c '. "$1"; secondmate_wake_stall_tick' _ "$ROOT/bin/fm-watch.sh")
   [ -z "$out" ] || fail "an empty secondmate queue produced a stall notification: $out"
+  # A directed-idle declaration suppresses the SILENCE-based alarms, which is what the
+  # expectation helper answers. It does not excuse a stall whose row is already actionable:
+  # that path suppressed nothing even before this card, because the mate was demonstrably
+  # handed work, so those two shapes are asserted separately below rather than merged.
   printf 'idle: 按指令 idle\n' > "$sub/state/mate.status"
   printf '100\t7\tcheck\trouted\tcheck: routed row\n' > "$sub/state/.wake-queue"
+  expected=$(FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
+    bash -c '. "$1"; secondmate_expectation_absent "$2" mate && printf yes' _ "$ROOT/bin/fm-watch.sh" "$sub")
+  [ "$expected" = yes ] || fail "a directed-idle declaration did not read as nothing expected"
   out=$(FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
-    bash -c '. "$1"; secondmate_wake_stall_tick' _ "$ROOT/bin/fm-watch.sh")
-  [ -z "$out" ] || fail "an explicitly idle secondmate produced a stall notification: $out"
+    bash -c '. "$1"; secondmate_idle_lapse_tick' _ "$ROOT/bin/fm-watch.sh")
+  [ -z "$out" ] || fail "an explicitly idle secondmate produced an idle-lapse notification: $out"
   for idle_line in \
     'paused [key=work-slug] [corr=0123456789abcdef]: 按指令 idle' \
     'idle [corr=0123456789abcdef]: idle as directed' \
     'working [key=work-slug] [corr=0123456789abcdef]: idle by instruction'; do
     printf '%s\n' "$idle_line" > "$sub/state/mate.status"
+    expected=$(FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
+      bash -c '. "$1"; secondmate_expectation_absent "$2" mate && printf yes' _ "$ROOT/bin/fm-watch.sh" "$sub")
+    [ "$expected" = yes ] || fail "a keyed directed-idle declaration did not read as nothing expected: $idle_line"
     out=$(FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
-      bash -c '. "$1"; secondmate_wake_stall_tick' _ "$ROOT/bin/fm-watch.sh")
-    [ -z "$out" ] || fail "a keyed explicitly idle secondmate produced a stall notification: $idle_line -> $out"
+      bash -c '. "$1"; secondmate_idle_lapse_tick' _ "$ROOT/bin/fm-watch.sh")
+    [ -z "$out" ] || fail "a keyed explicitly idle secondmate produced an idle-lapse notification: $idle_line -> $out"
   done
   outside="$dir/untrusted.status"
   printf 'paused [key=foreign] [corr=bad]: 按指令 idle\n' > "$outside"
@@ -263,7 +273,7 @@ test_secondmate_empty_or_declared_idle_queue_stays_silent() {
   ln -s "$outside" "$sub/state/mate.status"
   printf '100\t7\tcheck\trouted\tcheck: routed row\n' > "$sub/state/.wake-queue"
   out=$(FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
-    bash -c '. "$1"; secondmate_declared_idle "$2" mate' _ "$ROOT/bin/fm-watch.sh" "$sub") && rc=0 || rc=$?
+    bash -c '. "$1"; secondmate_self_declared_idle "$2" mate' _ "$ROOT/bin/fm-watch.sh" "$sub") && rc=0 || rc=$?
   [ "$rc" -ne 0 ] || fail "a symlinked child status was trusted as an idle declaration"
   rm -f "$sub/state/mate.status"
   printf 'paused [key=work-slug] [corr=0123456789abcdef]: 按指令 idle\n' > "$state/mate.status"
@@ -271,8 +281,8 @@ test_secondmate_empty_or_declared_idle_queue_stays_silent() {
     bash -c '. "$1"; secondmate_wake_stall_tick' _ "$ROOT/bin/fm-watch.sh")
   [ -z "$out" ] || fail "a parent-channel idle declaration produced a stall notification: $out"
   expected=$(FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
-    bash -c '. "$1"; secondmate_no_expected_work "$2" mate && printf yes' _ "$ROOT/bin/fm-watch.sh" "$sub")
-  [ "$expected" = yes ] || fail "the idle-lapse no-expected-work guard ignored the parent-channel declaration"
+    bash -c '. "$1"; secondmate_expectation_absent "$2" mate && printf yes' _ "$ROOT/bin/fm-watch.sh" "$sub")
+  [ "$expected" = yes ] || fail "the idle-lapse expectation guard ignored the parent-channel declaration"
   printf 'self_continue=1\n' >> "$state/mate.meta"
   out=$(FM_SECONDMATE_IDLE_LAPSE_SECS=1 FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
     bash -c '. "$1"; secondmate_idle_lapse_tick' _ "$ROOT/bin/fm-watch.sh")
@@ -291,9 +301,9 @@ test_secondmate_unsafe_queue_is_not_treated_as_empty() {
   ln -s "$outside" "$sub/state/.wake-queue"
   rc=0
   FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
-    bash -c '. "$1"; secondmate_no_expected_work "$2" mate' _ "$ROOT/bin/fm-watch.sh" "$sub" \
+    bash -c '. "$1"; secondmate_expectation_absent "$2" mate' _ "$ROOT/bin/fm-watch.sh" "$sub" \
     || rc=$?
-  [ "$rc" -ne 0 ] || fail "a rejected queue symlink was treated as no expected work"
+  [ "$rc" -eq 2 ] || fail "a rejected queue symlink read as something other than undecided (rc=$rc)"
   rc=0
   out=$(FM_STATE_OVERRIDE="$state" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" \
     bash -c '. "$1"; secondmate_wake_stall_tick' _ "$ROOT/bin/fm-watch.sh" 2>"$dir/tick.err") \

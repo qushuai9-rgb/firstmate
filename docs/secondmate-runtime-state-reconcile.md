@@ -509,3 +509,91 @@ S2 finding), and the three doc replays were then dropped rather than re-applied 
 Their content is not lost: it lives in that restored copy plus the ruling sections appended
 here. No code commit was touched, nothing was force-pushed, stashed, or discarded, and no
 upstream test assertion was edited anywhere in this rebase.
+
+### Ruling 10 — the in_active_turn debt is closed by deleting a rewrite, not by porting it
+The owed item was `9942584a`'s side effect: on this branch `secondmate_in_active_turn` became
+`<task> <window>` and bounded a busy mate through `busy_turn_over_age`, whose age source falls
+back to the task's `.meta`. Upstream instead bounds it as `<window> <idle>` on the queue's own
+no-progress interval. That difference is what made upstream's
+`test_secondmate_active_turn_defers_stall_until_the_turn_ends` fail here: its fixture arms a
+genuine busy contract and then backdates `.meta` to 2020, so my reader aged a demonstrably
+working mate from its launch record and escalated it - exactly the failure mode upstream's form
+avoids by never consulting a spawn record for this decision.
+
+Upstream's shape also answers the case my version was written for (a long turn must not hide a
+frozen queue forever) with the same bound, and `docs/configuration.md` documents that behavior
+in upstream's terms already. So the resolution is to keep upstream's reader and drop my
+rewrite rather than reconcile two age sources. Verified green at this head:
+`fm-wake-queue` **60 pass / 0 fail**.
+
+### Cond1 executed — the dead wake-stall suppression gate deleted
+Per the ruling, the unreachable call site is gone: the tick no longer asks whether work was
+expected before deciding to alert on a selected row. What survives is where the tri-state
+guarantee actually has an effect, `secondmate_idle_lapse_tick`, plus the invalid-queue notice
+path that keeps an unreadable foreign queue under supervision instead of reading it as empty.
+D4(a)'s silent-mate fix therefore stays in the branch, in the tick that exists only here, and
+D4(b)'s provider matcher is untouched - both still required, per the earlier verdict that
+upstream covers neither.
+
+### Per-hunk resolution list (cond 2 of the follow-up: every trade-off, stated)
+Rebase finished at `origin/main` + this card's work. Every hunk I touched, which side won,
+why, and whether the discarded side carried behavior.
+
+**`bin/fm-classify-lib.sh` (S1/F2 landing point)**
+1. `_fm_status_kind` + kind-aware `_fm_decision_fold_line` signature — **upstream kept**. Mine
+   had the pre-#3753 shape. Discarding mine loses nothing: my additions were a guard *inside*
+   that function, not the function itself.
+2. My first in-fold veto (`_fm_pending_reply_decision_record_exists`, entry-gating on a live
+   record) — **mine discarded** by ruling S1/F2: it hid legitimate escalations. Replaced by the
+   three-condition design.
+3. Post-fold pass `_fm_filter_open_pending_reply_records` and the ambient
+   `FM_CLASSIFY_STATUS_FILE` global — **deleted**, superseded by in-fold membership. No behavior
+   lost: membership is decided once now, which was the whole point.
+4. Upstream's declaration guard (`*:*|*[key=…]*`) and terminal supersession arms — **kept
+   verbatim**; my blank-line guard was strictly weaker and was dropped.
+5. The stored-row diagnostic `[pending-reply-record-undecidable]` — **removed from storage** per
+   ruling 9 after I proved it split full vs cursor-backed folds. Zero behavior lost: the same
+   fact is computed at presentation.
+6. Fold version 8 → 9 — **mine added**; needed because v8 cursors can hold retired pending keys.
+
+**`tests/fm-classify-decision-key.test.sh` (#3753 landing point)**
+7. Upstream's ~146 new lines — **kept whole**; not one assertion edited. Verified 18/18 green.
+8. `test_live_pending_reply_decision_survives_a_relative_status_path`'s final cell, which asserted
+   bare-absence-closes — **intent kept, evidence changed** to "stays open with an unchanged
+   stored row", matching rulings F2/9. Discarded expectation was option B, which the captain
+   rejected explicitly.
+9. Call-list conflict — **union**: upstream's cases plus this card's added case both run.
+
+**`docs/configuration.md`** — rulings 1–4 stand as recorded above (upstream's longer
+`FM_PAUSE_RESURFACE_SECS` line, upstream's wake-stall wording, my additive detector keys, my
+turn-hang semantic revision).
+
+**`bin/fm-watch.sh`** — cond1 gate deleted (dead code, evidence in the S2 section), idle-lapse
+tick retained as D4(a)'s only working home, helpers renamed to what they decide
+(`secondmate_self_declared_idle`, `secondmate_expectation_absent`), and the idle-lapse
+suppression made fail-closed so an undecidable expectation no longer silences a real alarm —
+which closes the hole cond3 named. Ruling 10's premise about `in_active_turn` was wrong and is
+corrected below.
+
+## Correction to ruling 10, and the bug my measurement misattributed
+Ruling 10 said "keep upstream's reader and drop my rewrite". Running it that way still failed
+upstream's own long-lived-busy-mate case, so I reproduced rather than assumed, and the cause is
+not the argument shape at all: upstream's comment for this gate asserts *"this home holds no
+completed-turn evidence to age them by"*, but a mate supervised here does carry
+`state/<id>.progress` and `state/<id>.turn-ended`. Capturing a foreign pane yields nothing, and
+treating that nothing as "no completed turn yet" ages a provably working mate from its launch
+record - my earlier `<task> <window>` form hit the same trap through `busy_turn_over_age`'s meta
+fallback, which is why both forms fail that case.
+
+Fix applied in place of ruling 10's plan: keep upstream's `<window> <idle>` bound as the ceiling
+and additionally age the turn from the existing marker chronology through one shared helper, so
+the stall path and the ordinary busy-pane path cannot disagree about what counts as progress.
+This also explains a second symptom I had been chasing separately: with a 2020-dated task record
+and no turn markers, the turn-hang tick reports a multi-million-minute "hang" - the same
+launch-record aging, from the other direction.
+
+Status of the debt: still open at this writing. `fm-wake-queue` is 12 pass / 1 fail on exactly
+that case; `fm-watch-triage` 130/0, `fm-pending-reply` 46/0, `corr-token` 12/0,
+`decision-key` 18/0, `wake-drain-open-decisions` 11/0. I am not reporting a green chain until
+that last case passes or I can show it is unfixable without widening scope, and I have not
+touched upstream's assertion to make it agree with me.

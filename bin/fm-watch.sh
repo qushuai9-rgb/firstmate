@@ -760,7 +760,7 @@ recorded_windows() {
 # 1 = it does not, 3 = the line could not be read. Silence alone suppresses nothing.
 # A status object reached through a symlink is not this mate's own declaration, so it
 # reads as undecidable rather than as proof either way.
-secondmate_declared_idle() {  # <secondmate-home> <task-id> -> 0|1|3
+secondmate_self_declared_idle() {  # <secondmate-home> <task-id> -> 0|1|3
   local home=$1 task=$2 status child_status lines last verb note
   child_status="$home/state/$task.status"
   if [ -e "$child_status" ] || [ -L "$child_status" ]; then
@@ -817,14 +817,22 @@ secondmate_oldest_queue_row() {  # <queue-path>
 # declares the mate idle. 2 = the queue itself could not be trusted, which the
 # caller reports through the invalid-queue notice rather than as an alert. Never
 # treat an unreadable queue as proof that nothing was expected.
-secondmate_no_expected_work() {  # <secondmate-home> <task-id> -> 0|1|2
+# Was any self-driven work expected of this mate at all? This is a question about whether
+# anything was ever handed over, NOT a way to excuse an alarm once something was:
+# 0 = demonstrably nothing expected (no actionable row, or the mate's own newest status line
+# declares directed idleness), 1 = work was expected, 2 = that cannot be established, which
+# no caller may read as "nothing expected". It exists for the idle-lapse tick, whose alarm is
+# raised on silence alone and therefore has to know whether silence meant "idle by order" or
+# "still has work". A stall path that already holds an actionable row can never get a useful
+# answer from it, so no such path calls it.
+secondmate_expectation_absent() {  # <secondmate-home> <task-id> -> 0|1|2
   local home=$1 task=$2 row queue queue_rc
   queue="$home/state/.wake-queue"
   row=$(secondmate_oldest_queue_row "$queue")
   queue_rc=$?
   case "$queue_rc" in
     2) return 2 ;;
-    0) secondmate_declared_idle "$home" "$task" || return 1 ;;
+    0) secondmate_self_declared_idle "$home" "$task" || return 1 ;;
     1) return 0 ;;
     *) return 1 ;;
   esac
@@ -859,13 +867,47 @@ secondmate_invalid_queue_tick() {  # <task>
 # launch). Any absence of proof (no window, a failed capture, an idle or unknown
 # verdict, a queue frozen past the bound) is NOT an active turn, so a frozen
 # queue still escalates.
+#
+# That "no completed-turn evidence" premise was only true of the pane capture, not of this
+# home's records: a mate supervised here already carries state/<id>.progress and, once it ends
+# a turn, state/<id>.turn-ended, so the same marker chronology ordinary busy panes use can age
+# a mate's turn directly. Capture yields nothing for a foreign pane, and reading that nothing as
+# "no completed turn yet" aged a provably working mate from its launch record and alarmed on it.
+# So the turn is now aged from those markers when they exist, with the queue's own interval
+# kept as the ceiling for a mate that has produced neither yet.
 secondmate_in_active_turn() {  # <window> <idle>
-  local w=$1 idle=$2 tail40
+  local w=$1 idle=$2 tail40 task age
   [ -n "$w" ] || return 1
   [ "$idle" -lt "$BUSY_TURN_MAX_SECS" ] || return 1
+  task=$(window_to_task "$w" "$STATE")
+  if [ -n "$task" ]; then
+    age=$(secondmate_turn_age_secs "$task")
+    # Absence of any turn marker leaves the interval bound above as the only clock, which is
+    # deliberately unchanged: a mate that never started a turn cannot prove liveness either.
+    [ "$age" -lt 0 ] || [ "$age" -lt "$BUSY_TURN_MAX_SECS" ] || return 1
+  fi
   tail40=$(fm_backend_capture "$(window_backend "$w")" "$w" 40 "$(window_label "$w")" 2>/dev/null) || return 1
   window_is_busy "$w" "$tail40"
 }
+
+# Seconds since this task's newest turn evidence, or -1 when this home holds none at all.
+# Mirrors busy_turn_over_age's marker selection (progress refreshed during a live turn, else
+# the last completed turn, else the task record) rather than defining a second chronology for
+# mates, so the two paths cannot disagree about what counts as progress. The task record itself
+# is reported only when no turn or progress marker exists, which is the pre-first-turn case the
+# previous shape conflated with a long-running turn.
+secondmate_turn_age_secs() {  # <task> -> non-negative seconds, or -1
+  local task=$1 f progress
+  f="$STATE/$task.turn-ended"
+  if [ ! -e "$f" ]; then
+    f="$STATE/$task.progress"
+    [ -e "$f" ] || { printf -- '-1'; return 0; }
+  fi
+  progress="$STATE/$task.progress"
+  if [ -f "$progress" ] && [ "$progress" -nt "$f" ]; then f="$progress"; fi
+  age_of "$f"
+}
+
 
 # Surface one durable parent check when the foreign queue's drain position has
 # not moved for the bounded interval. The progress marker records that position
@@ -884,7 +926,7 @@ secondmate_in_active_turn() {  # <window> <idle>
 secondmate_wake_stall_tick() {
   local now=$(( $(date +%s) )) threshold=$SECONDMATE_WAKE_STALL_SECS
   local meta task kind remote_host home queue row queue_rc epoch seq row_key marker progress_marker progress observed_at observed_key
-  local receipt receipt_dir notify_key queued idle reason episode_alerted expect_rc
+  local receipt receipt_dir notify_key queued idle reason episode_alerted
   # Endpoint metadata admits this queue-loop check; secondmate-liveness owns registered mates whose endpoint is missing or dead.
   for meta in "$STATE"/*.meta; do
     [ -e "$meta" ] || continue
@@ -918,32 +960,16 @@ secondmate_wake_stall_tick() {
     marker="$STATE/.secondmate-wake-stall-$task"
     progress_marker="$STATE/.secondmate-wake-progress-$task"
     receipt_dir="$STATE/.secondmate-wake-stall-receipts/$task"
-    # Only two conditions suppress this alarm, and both must be proven: the foreign
-    # queue is demonstrably empty of actionable rows, or the mate's own newest status
-    # line declares directed idleness. An undecidable read keeps the alarm armed and
-    # says so once per episode, because a queue whose expectation cannot be
-    # established must never look like a mate with nothing to do.
-    secondmate_no_expected_work "$home" "$task"
-    expect_rc=$?
-    if [ "$expect_rc" -eq 0 ]; then
+    # Holding no actionable row is the only thing that may retire a stall episode here, and
+    # it is proven by the reader itself rather than by a declaration: an idle mate drains its
+    # own rows, so "nothing expected" already means "no row". A directed-idle declaration
+    # cannot excuse a frozen queue, because the parent demonstrably handed work over, so
+    # declarations belong to the silence-based idle-lapse tick and never to this path.
+    if [ -z "$row" ]; then
       rm -f "$marker" "$progress_marker"
       if [ -e "$receipt_dir" ] || [ -L "$receipt_dir" ]; then
         [ -d "$receipt_dir" ] && [ ! -L "$receipt_dir" ] || return 1
         rm -rf -- "$receipt_dir" || return 1
-      fi
-      continue
-    fi
-    if [ "$expect_rc" -ne 1 ]; then
-      # No interval can be timed against a drain position that could not be read,
-      # so clear the episode state and report the inability to decide through the
-      # same durable check wake a real stall uses, once per episode.
-      rm -f "$marker" "$progress_marker" || return 1
-      notify_key="secondmate-wake-loop-undecidable-$task"
-      reason="check: secondmate wake-loop undecidable: mate=$task cause=expectation-unreadable; the stall alarm remains armed"
-      queued=$(fm_wake_queued_keys check)
-      if ! printf '%s\n' "$queued" | grep -Fx "$notify_key" >/dev/null 2>&1; then
-        fm_wake_append check "$notify_key" "$reason" || return 1
-        wake "$reason"
       fi
       continue
     fi
@@ -1159,6 +1185,7 @@ secondmate_self_continue_effective() {  # <meta-file> <home>
 
 secondmate_idle_lapse_tick() {
   local meta task kind remote_host home win bound age last verb anchor reason queued
+  local expect_rc notify_key
   for meta in "$STATE"/*.meta; do
     [ -e "$meta" ] || continue
     kind=$(fm_meta_get "$meta" kind)
@@ -1173,8 +1200,27 @@ secondmate_idle_lapse_tick() {
     [ "$(secondmate_self_continue_effective "$meta" "$home")" = 1 ] || continue
     [ -f "$home/.fm-secondmate-home" ] && [ ! -L "$home/.fm-secondmate-home" ] || continue
     [ "$(cat "$home/.fm-secondmate-home" 2>/dev/null || true)" = "$task" ] || continue
-    secondmate_no_expected_work "$home" "$task"
-    [ $? -eq 0 ] || continue
+    # Silence is the whole evidence here, so only a PROVEN absence of expectation may
+    # suppress this alarm. Undecidable falls through to the ordinary checks below, which
+    # keeps a mate whose queue cannot be read still visible instead of quietly retiring a
+    # real silent-mate alert - the same "cannot tell is not proof" rule the classifier fold
+    # applies to pending-reply records.
+    secondmate_expectation_absent "$home" "$task"
+    expect_rc=$?
+    if [ "$expect_rc" -eq 0 ]; then
+      rm -f "$STATE/.secondmate-idle-alerted-$task"
+      continue
+    fi
+    if [ "$expect_rc" -eq 2 ]; then
+      # Report the inability to decide once per episode, then keep evaluating this mate
+      # normally so an unreadable queue never looks like a mate with nothing to do.
+      notify_key="secondmate-idle-lapse-undecidable-$task"
+      queued=$(fm_wake_queued_keys check)
+      if ! printf '%s\n' "$queued" | grep -Fx "$notify_key" >/dev/null 2>&1; then
+        fm_wake_append check "$notify_key" \
+          "check: secondmate idle lapse undecidable: mate=$task cause=expectation-unreadable; the lapse alarm stays armed" || return 1
+      fi
+    fi
     win=$(fm_backend_target_of_meta "$meta")
     [ -n "$win" ] || continue
     anchor="$STATE/.secondmate-idle-anchor-$task"
