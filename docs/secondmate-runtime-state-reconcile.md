@@ -597,3 +597,45 @@ that case; `fm-watch-triage` 130/0, `fm-pending-reply` 46/0, `corr-token` 12/0,
 `decision-key` 18/0, `wake-drain-open-decisions` 11/0. I am not reporting a green chain until
 that last case passes or I can show it is unfixable without widening scope, and I have not
 touched upstream's assertion to make it agree with me.
+
+## Ruling 10 is not implementable as written — evidence, and the decision I am NOT making alone
+I ran upstream's own suite before touching anything: `origin/main`'s extracted tree gives
+`fm-wake-queue` **42 pass / 0 fail** in this environment. So both pinned behaviors are
+simultaneously satisfiable by code that already exists upstream, and my job was to stop breaking
+them - which ruling 10 as literally worded ("keep upstream's reader") does not do either, on its
+own or combined with my other changes. Four attempts, each measured rather than argued:
+
+| Attempt | Result | Why it failed |
+|---|---|---|
+| A. Upstream's `<window> <idle>` reader verbatim | 12/1 | The long-lived-busy-mate case still alerts |
+| B. A + age the turn from progress/turn-ended markers | 12/1 | Same failure; those markers are absent in the fixture |
+| C. B + no exemption when no turn evidence exists | 11/2 | Fixes A's case, breaks the sibling "a mate inside an active turn defers the stall escalation" |
+| D. My original `<task> <window>` + spawn-age form | 12/1 | Ages a working mate off its launch record |
+
+The discriminating fact comes out of attempt C versus its sibling case: both fixtures arm a busy
+contract, backdate `.meta`, and write no `turn-ended`. They differ only in elapsed interval
+(short vs past `BUSY_TURN_MAX_SECS`). So upstream's *only* discriminator between "healthy long
+turn, defer" and "turn too old, alarm" is the meta-derived age it also calls unageable - which
+means the pair cannot be satisfied by any rule that reads a single clock, unless something else
+distinguishes them. What distinguishes them in production is exactly what the first fixture does
+not provide: `state/mate.turn-ended`, present for a mate that has completed a turn.
+
+That yields two candidate rulings, and they are not mine to pick silently because they trade
+different things:
+
+- **R10-a (evidence-based exemption):** treat a recorded turn completion as the precondition for
+  the busy exemption, keep the pane-busy verdict plus the queue-interval ceiling beside it, and
+  never age off the task record. Consequence: a mate this home has never seen finish a turn gets
+  no exemption, so a genuinely long *first* turn can still alarm - visible noise instead of the
+  silent-suppression risk. Needs one small state marker per task plus cleanup on teardown.
+- **R10-b (restore upstream exactly and delete my branch's added secondmate supervision on this
+  path):** then upstream's 42/0 applies unchanged, but this card loses whatever real protection
+  my extra tick supplied there, and D4(a)'s fix must be re-verified as independent of it.
+
+My recommendation is R10-a, because it preserves both pinned cases without inventing a clock,
+and its residual weakness (long first turns) fails loudly rather than quietly. Both current test
+runs are quoted above so the choice can be checked against behavior, not prose. Until you rule,
+the branch stays at the committed baseline with `fm-wake-queue` at 12/1 and every other card
+suite green (`fm-watch-triage` 130/0, `fm-pending-reply` 46/0, `corr-token` 12/0, `decision-key`
+18/0, `wake-drain-open-decisions` 11/0); nothing has been stashed, force-pushed, or discarded, and
+no upstream assertion was edited in any attempt.
