@@ -856,66 +856,36 @@ secondmate_invalid_queue_tick() {  # <task>
 }
 
 # 0 iff <task> is demonstrably inside an active turn, through the watcher's own
-# busy-state knowledge: an exact busy verdict from the semantic contract, bounded
-# by the same BUSY_TURN_MAX_SECS that stops a busy pane from proving liveness
-# forever. A mate mid-turn has not stopped draining its queue - it simply drains
-# between turns - so this gate, not the elapsed interval, is what separates a
-# healthy mate from a frozen wake loop. The bound is measured on <idle>, how long
-# the queue's drain position has not moved, because a mate's turns end in its own
-# home and this home holds no completed-turn evidence to age them by
-# (busy_turn_over_age, whose spawn-record fallback would age every mate from its
-# launch). Any absence of proof (no window, a failed capture, an idle or unknown
-# verdict, a queue frozen past the bound) is NOT an active turn, so a frozen
-# queue still escalates.
+# busy-state knowledge: an exact busy verdict from the semantic contract, bounded by
+# the same BUSY_TURN_MAX_SECS that stops a busy pane from proving liveness forever. A
+# mate mid-turn has not stopped draining its queue - it simply drains between turns -
+# so this gate, not the elapsed interval alone, is what separates a healthy mate from a
+# frozen wake loop, and BOTH bounds stay required: the foreign queue's own no-progress
+# interval and the mate's turn evidence each answer for a different half of the claim.
 #
-# That "no completed-turn evidence" premise was only true of the pane capture, not of this
-# home's records: a mate supervised here already carries state/<id>.progress and, once it ends
-# a turn, state/<id>.turn-ended, so the same marker chronology ordinary busy panes use can age
-# a mate's turn directly. Capture yields nothing for a foreign pane, and reading that nothing as
-# "no completed turn yet" aged a provably working mate from its launch record and alarmed on it.
-# So the turn is now aged from those markers when they exist, with the queue's own interval
-# kept as the ceiling for a mate that has produced neither yet.
+# Liveness is proved positively and never inferred from an absent clock. Only the live-turn
+# progress record says "this task is working right now"; the completed-turn marker says the
+# opposite, and a rendered busy footer survives verbatim into an idle pane's scrollback, so
+# neither can carry an exemption. That ordering is exactly why ending a turn ends the
+# deferral: fm-busy-event.sh removes the progress record when the owner publishes its stop, so
+# the next poll sees no positive evidence and reports the still-frozen queue. And a mate whose
+# progress record is itself older than the turn bound this fleet already treats as stale gets
+# no exemption either, which is what keeps a turn that never ends from hiding anything.
 secondmate_in_active_turn() {  # <window> <idle>
-  local w=$1 idle=$2 tail40 task age
+  local w=$1 idle=$2 tail40 task progress
   [ -n "$w" ] || return 1
   [ "$idle" -lt "$BUSY_TURN_MAX_SECS" ] || return 1
   task=$(window_to_task "$w" "$STATE")
   if [ -n "$task" ]; then
-    # Ruling R10-a's precondition, required ALONGSIDE the interval bound rather than instead
-    # of it. The exemption claims "this mate is inside a turn, so its queue simply has not been
-    # reached", and only a turn this home actually recorded can support that claim: a rendered
-    # busy footer persists verbatim into an idle pane's scrollback, so the verdict alone cannot
-    # carry an exemption past the age the fleet already treats as stale. Ending the turn is what
-    # ends the deferral - the owner publishes its completion, and the next poll alarms on the
-    # still-frozen queue.
-    [ -e "$STATE/$task.turn-ended" ] || [ -e "$STATE/$task.progress" ] || return 1
-    age=$(secondmate_turn_age_secs "$task")
-    # A mate with no marker at all keeps upstream's reading: the elapsed interval is its only
-    # clock, and something that never started a turn cannot prove it is alive either.
-    [ "$age" -lt 0 ] && return 1
-    [ "$age" -lt "$BUSY_TURN_MAX_SECS" ] || return 1
+    progress="$STATE/$task.progress"
+    [ -f "$progress" ] && [ ! -L "$progress" ] || return 1
+    [ "$(age_of "$progress")" -lt "$BUSY_TURN_MAX_SECS" ] || return 1
   fi
   tail40=$(fm_backend_capture "$(window_backend "$w")" "$w" 40 "$(window_label "$w")" 2>/dev/null) || return 1
   window_is_busy "$w" "$tail40"
 }
 
-# Seconds since this task's newest turn evidence, or -1 when this home holds none at all.
-# Mirrors busy_turn_over_age's marker selection (progress refreshed during a live turn, else
-# the last completed turn, else the task record) rather than defining a second chronology for
-# mates, so the two paths cannot disagree about what counts as progress. The task record itself
-# is reported only when no turn or progress marker exists, which is the pre-first-turn case the
-# previous shape conflated with a long-running turn.
-secondmate_turn_age_secs() {  # <task> -> non-negative seconds, or -1
-  local task=$1 f progress
-  f="$STATE/$task.turn-ended"
-  if [ ! -e "$f" ]; then
-    f="$STATE/$task.progress"
-    [ -e "$f" ] || { printf -- '-1'; return 0; }
-  fi
-  progress="$STATE/$task.progress"
-  if [ -f "$progress" ] && [ "$progress" -nt "$f" ]; then f="$progress"; fi
-  age_of "$f"
-}
+
 
 
 # Surface one durable parent check when the foreign queue's drain position has

@@ -670,27 +670,32 @@ bound → alarms), because asserting prose without reproducing behavior is how t
 bugs were made.
 
 ## Requirement 4 result, reported honestly: 11 pass / 1 fail, not 42/0
-The failing case is `an active turn defers the stall escalation without cancelling it`, and the
-reason is fixture shape, not the rule: it arms a busy contract, backdates `.meta` to 2020, keeps
-one actionable row, and writes **no** turn marker - then expects deferral. Under requirement 2
-that input has nothing to point at, so it escalates. Upstream avoids the contradiction only by
-aging off the launch record, which requirement 3 forbids and which fails the sibling case anyway
-(measured: attempts A-D in the table above). Its other wake-queue cases also assume markers that
-never appear here, since a real watcher updates them through runtime hooks rather than in a
-fixture.
+### Correction, on the record: my diagnosis there was wrong
+I wrote that the failure was "fixture shape, not the rule". It was not, and that phrasing is the
+one that has buried every real bug found tonight, so it is retracted rather than softened. The
+ruling that followed was right: the bound I added did not actually take effect. Reading the two
+halves of that case again shows it locks **two directions at once** - no alarm while a turn is
+running, and an alarm as soon as it ends - and my reader satisfied neither honestly, because it
+let an *absent* clock stand in for positive proof of liveness.
 
-So the pair "keep this card's secondmate supervision" and "upstream's 42/0" is not reachable
-through the exemption alone; it needs the fixtures to state the turn evidence they rely on. I am
-not editing those assertions to agree with me, and I am not shipping a green-looking chain built
-on deleting the protection. Options, needing your word:
-- **E1:** extend the two deferral fixtures to publish the turn completion their claim already
-  describes (they exercise turn end seconds later), keeping every assertion intact. Smallest
-  honest change; touches tests this card did not write.
-- **E2:** keep a bounded launch-record fallback solely when a semantic busy verdict is available,
-  contradicting requirement 3's single chronology; I measured this variant earlier and it does
-  not make the suite green either.
-- **E3:** ship as-is with the one case red and documented, and let the pipeline gate decide.
+What the two directions actually need is a discriminator by evidence kind, not a different
+threshold, and that is what ruled R10-c implements: live-turn progress says "working right now",
+the completed-turn marker says the opposite, and a rendered busy footer survives verbatim into an
+idle pane's scrollback so it can prove neither. Ending a turn therefore ends the exemption the
+moment the owner publishes its stop, which is the semantics line 595 of that case asks for, and a
+progress record older than the turn bound stops exempting anything either. No threshold was moved
+to get there: the fixture's stall interval stays 1s and BUSY_TURN_MAX_SECS keeps its default.
 
+Measured outcome after R10-c, reported as observed rather than as hoped: the case still fails,
+and the reason is narrower than before. Arming a busy contract writes only the generation and
+record files - `state/<id>.progress` appears solely when the harness reports activity through
+`fm-busy-event.sh progress` - so the fixture has no positive live-turn evidence to check, and any
+rule that demands one will alarm on it. Upstream passes today only because it treats a captured
+busy footer as sufficient, which is precisely the unbounded exemption the ruling forbids. That
+leaves two ways to satisfy both directions and they are not mine to choose between silently:
+publish the progress event inside the deferral fixture (a fact about the scenario it claims, with
+both assertions untouched), or accept a bounded fallback where a semantic busy verdict exempts
+until the interval bound crosses - which restores upstream's exact weakness for long first turns.
 Counts right now: `fm-watch-triage` 130/0, `fm-pending-reply` 46/0, `corr-token` 12/0,
 #3753 `decision-key` 18/0, `wake-drain-open-decisions` 11/0 — none regressed by this change;
 `fm-wake-queue` 11/1 as described.
