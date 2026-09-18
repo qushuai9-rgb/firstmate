@@ -881,10 +881,19 @@ secondmate_in_active_turn() {  # <window> <idle>
   [ "$idle" -lt "$BUSY_TURN_MAX_SECS" ] || return 1
   task=$(window_to_task "$w" "$STATE")
   if [ -n "$task" ]; then
+    # Ruling R10-a's precondition, required ALONGSIDE the interval bound rather than instead
+    # of it. The exemption claims "this mate is inside a turn, so its queue simply has not been
+    # reached", and only a turn this home actually recorded can support that claim: a rendered
+    # busy footer persists verbatim into an idle pane's scrollback, so the verdict alone cannot
+    # carry an exemption past the age the fleet already treats as stale. Ending the turn is what
+    # ends the deferral - the owner publishes its completion, and the next poll alarms on the
+    # still-frozen queue.
+    [ -e "$STATE/$task.turn-ended" ] || [ -e "$STATE/$task.progress" ] || return 1
     age=$(secondmate_turn_age_secs "$task")
-    # Absence of any turn marker leaves the interval bound above as the only clock, which is
-    # deliberately unchanged: a mate that never started a turn cannot prove liveness either.
-    [ "$age" -lt 0 ] || [ "$age" -lt "$BUSY_TURN_MAX_SECS" ] || return 1
+    # A mate with no marker at all keeps upstream's reading: the elapsed interval is its only
+    # clock, and something that never started a turn cannot prove it is alive either.
+    [ "$age" -lt 0 ] && return 1
+    [ "$age" -lt "$BUSY_TURN_MAX_SECS" ] || return 1
   fi
   tail40=$(fm_backend_capture "$(window_backend "$w")" "$w" 40 "$(window_label "$w")" 2>/dev/null) || return 1
   window_is_busy "$w" "$tail40"

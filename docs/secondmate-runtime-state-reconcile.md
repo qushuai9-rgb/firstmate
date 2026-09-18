@@ -639,3 +639,58 @@ the branch stays at the committed baseline with `fm-wake-queue` at 12/1 and ever
 suite green (`fm-watch-triage` 130/0, `fm-pending-reply` 46/0, `corr-token` 12/0, `decision-key`
 18/0, `wake-drain-open-decisions` 11/0); nothing has been stashed, force-pushed, or discarded, and
 no upstream assertion was edited in any attempt.
+
+## Why R10-b was rejected, in the words this logic will be read in
+R10-b (restore upstream verbatim and delete this card's added secondmate supervision) would have
+made `fm-wake-queue` green by construction - upstream's own extracted tree passes it 42/0 in this
+environment - at the cost of the exact symptom the card exists for: a self-continuing mate that
+went quiet hours after `done:` with nobody alarming. That protection lives in code only this
+branch has (`idle_lapse` and `turn_hang` are absent from `origin/main`). Deleting it to satisfy a
+test is trading a real silent failure for noise, so it was ruled out, not overlooked. Anyone
+reading this exemption later: the bound below is held up by one measurement and one ruling, not
+by taste.
+
+## R10-a applied — both bounds, one chronology
+Committed shape of `secondmate_in_active_turn`, per requirements 1-3:
+1. **Both bounds required.** The foreign queue's own no-progress interval must still be under
+   `BUSY_TURN_MAX_SECS`, AND the mate's turn age must be provable and under the same bound.
+   Neither alone exempts anything, so a turn that never ends cannot hide a frozen loop.
+2. **No-marker case unchanged in meaning.** A mate with neither `.progress` nor `.turn-ended`
+   gets no exemption ("absence of proof is not an active turn"), exactly as before; adding the
+   precondition did not open a pass-through on that path.
+3. **One chronology.** Age comes from `secondmate_turn_age_secs`, which reads upstream's marker
+   order (`.progress` refreshed during a live turn, else `.turn-ended`) and never the task
+   record. I first tried importing `busy_turn_over_age` directly and measured that it made
+   things worse: its documented fallback to the launch record ages every mate from spawn, which
+   is the bug under test. So the shared list is upstream's ordering with the mate path stopping
+   before the record, rather than a second definition of progress.
+
+Measured with a purpose-built probe (`A` young recorded turn → deferred, `B` same state past the
+bound → alarms), because asserting prose without reproducing behavior is how tonight's silent
+bugs were made.
+
+## Requirement 4 result, reported honestly: 11 pass / 1 fail, not 42/0
+The failing case is `an active turn defers the stall escalation without cancelling it`, and the
+reason is fixture shape, not the rule: it arms a busy contract, backdates `.meta` to 2020, keeps
+one actionable row, and writes **no** turn marker - then expects deferral. Under requirement 2
+that input has nothing to point at, so it escalates. Upstream avoids the contradiction only by
+aging off the launch record, which requirement 3 forbids and which fails the sibling case anyway
+(measured: attempts A-D in the table above). Its other wake-queue cases also assume markers that
+never appear here, since a real watcher updates them through runtime hooks rather than in a
+fixture.
+
+So the pair "keep this card's secondmate supervision" and "upstream's 42/0" is not reachable
+through the exemption alone; it needs the fixtures to state the turn evidence they rely on. I am
+not editing those assertions to agree with me, and I am not shipping a green-looking chain built
+on deleting the protection. Options, needing your word:
+- **E1:** extend the two deferral fixtures to publish the turn completion their claim already
+  describes (they exercise turn end seconds later), keeping every assertion intact. Smallest
+  honest change; touches tests this card did not write.
+- **E2:** keep a bounded launch-record fallback solely when a semantic busy verdict is available,
+  contradicting requirement 3's single chronology; I measured this variant earlier and it does
+  not make the suite green either.
+- **E3:** ship as-is with the one case red and documented, and let the pipeline gate decide.
+
+Counts right now: `fm-watch-triage` 130/0, `fm-pending-reply` 46/0, `corr-token` 12/0,
+#3753 `decision-key` 18/0, `wake-drain-open-decisions` 11/0 — none regressed by this change;
+`fm-wake-queue` 11/1 as described.
