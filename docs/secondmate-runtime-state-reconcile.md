@@ -781,3 +781,30 @@ Ruled out by measurement rather than assumption: model tier (direct calls to the
 returned 200 with full output), and batch size (this hang occurred before the gate emitted any
 finding, so there was no long streamed reply to avoid). Decision: no third retry from the crew
 side, and tool upgrade or daemon restart belongs to the captain's side, not to this card.
+
+## Failure class 7: the gate demanding a scope reduction (reverse bite)
+Every earlier entry in this file records the reviewer missing something. This one records the
+opposite, logged at the same evidentiary standard because it is the shape most likely to be
+mistaken for good hygiene: a finding that reads as "outside the stated intent" and asks for
+deletion of code the task exists to add.
+
+| field | value |
+|---|---|
+| time | 2026-09-19 00:47 local (run `01M2TBGHYBHYY4CTG7D7J9W925`, review step, `fix_review`) |
+| finding ids | `REVIEW-001`, `REVIEW-002` (both severity warning, action **ask-user**) |
+| what it asked to delete | REVIEW-001: `secondmate_provider_error_tick` - pane-text provider-error classification, its markers, regex, configuration and tests. REVIEW-002: `secondmate_turn_hang_tick` - busy-turn detector, output-growth policy, confirmation ladder, stale wake, per-task configuration, documentation and tests |
+| its stated reason | neither appears in the task's listed intent criteria, so the components were called an expansion of the supervision surface |
+| disposition | **refused**; nothing removed. Rejected through the gate's supported non-destructive action only (`skip`), never by fixing toward deletion, and no implementation was edited |
+
+Why the demand was wrong rather than merely strict: both detectors are this card's core mechanism,
+not adjacent tooling. One identifies upstream error text from rendered output and pairs it with the
+correlating record; the other watches a turn that claims to be busy while producing nothing - the
+false wedge escalation reported during this very session is exactly what that detector caught. The
+captain verified they exist only on this branch (`origin/main` hit count 0, this branch 1 file each)
+and traced their introduction to `90336d4` plus the idle/hang series (`e982cb0`, `5aa2479`,
+`74485d3`, `e375d05`). Deleting them would have raised the green count while reinstating the defect
+the card was opened on. Scope belongs to the captain and the primary, not to the review gate.
+
+Counts recorded alongside this ruling, run by the captain from the pipeline head `b234e35`:
+fm-wake-queue 45 · fm-pending-reply 46 · corr-token 12 · decision-key 18 = **121 ok / 0 not ok**,
+with the wake-queue cases being the ones covering this chain.
