@@ -809,3 +809,28 @@ the card was opened on. Scope belongs to the captain and the primary, not to the
 Counts recorded alongside this ruling, run by the captain from the pipeline head `b234e35`:
 fm-wake-queue 45 · fm-pending-reply 46 · corr-token 12 · decision-key 18 = **121 ok / 0 not ok**,
 with the wake-queue cases being the ones covering this chain.
+
+## Failure classes are not interchangeable: stream interruption vs external quota
+Keeping these separate matters, because they imply different fixes and different escalations. The
+earlier entries in this file are **class A - upstream stream interruption**: the reviewer subprocess
+sits at 0.0% CPU holding an ESTABLISHED socket that carries no data, and either logs
+`Upstream response stream was interrupted` or logs nothing at all (runs
+`01M2MM9K7F6NF8GGQ5T35458DN`, `01M2SD3NM1NPEYA47WMBZAFMZB`, `01M2SKNVDXNCEXXPN410WNWZ14`,
+`01M2SNDD2B7VZ94J28H1N5J4TY`). That family is a tool-layer fault on a stale daemon and old binary,
+which the captain addressed by replacing both.
+
+**Class B - external account quota** is a different failure with a different owner, first seen on
+run `01M2TBGHYBHYY4CTG7D7J9W925`:
+
+| field | value |
+|---|---|
+| time | 2026-09-19 01:0x local |
+| step | lint, after the linter gap was closed (ShellCheck 0.11.0 installed via the project's own pinned-release installer, matching `--required-version`) |
+| verbatim error | `pi exited pid=3300 error=pi reported error: Concurrency limit exceeded for account, please retry later` |
+| signature | immediate refusal naming a limit, **not** a silent zero-CPU hang; the agent never started work |
+| state left | `lint failed`, run `failed`, `branch_sync` still `pipeline_owned` at `blocked_recover_manual_reconciliation` |
+| disposition | no in-place retry; ownership settlement handled first per the structured next action, one retry permitted afterward, then escalate with timestamp and text |
+
+Conflating them would waste the evidence: class A argues for restarting or upgrading the pipeline
+daemon, while class B argues for dispatch-quota changes and says nothing about the tool's health. A
+"retry it" reflex aimed at class B also burns the same account that is already refusing requests.
