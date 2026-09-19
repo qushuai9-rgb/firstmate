@@ -834,3 +834,11 @@ run `01M2TBGHYBHYY4CTG7D7J9W925`:
 Conflating them would waste the evidence: class A argues for restarting or upgrading the pipeline
 daemon, while class B argues for dispatch-quota changes and says nothing about the tool's health. A
 "retry it" reflex aimed at class B also burns the same account that is already refusing requests.
+
+## Delivery attempt against the upstream repository: refused before any object left this machine
+The branch's `origin` is the upstream public project, not a remote this home may write to, and the
+account in use holds read-only permission there. A push therefore failed at authorization ahead of
+the transfer: **push 被该仓库的 READ-only 权限拒绝,失败发生在对象传输之前,因此无外传**. Verified
+afterward rather than assumed - an exact-ref lookup returns no hit for this branch, so it never
+appeared upstream. The 38 other `fm/*` refs on that remote are this repository's own history and
+unrelated to this card; recording that count so nobody reads them as evidence of exposure.
