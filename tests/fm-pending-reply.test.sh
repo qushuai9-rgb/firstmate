@@ -1640,9 +1640,14 @@ test_recordless_pending_key_stays_open_and_reports_undecidable() {
   pass "recordless pending keys stay open without storing uncertainty, and reject foreign notes"
 }
 
-test_symlinked_pending_record_is_not_owned_or_expired() {
-  local home state corr rec external status
-  home=$(setup_parent symlinked-pending-record)
+# Both cases below build the same fixture on purpose: a real record moved out of the owner's
+# directory and replaced by a symlink pointing at it. They then pin the OPPOSITE halves of one
+# rule, which is why they must stay separate tests rather than collapse into whichever definition
+# happens to load last. This one pins the reader: the classifier must not read through a symlink,
+# so a decision whose object lies behind one is undecided - visible, never treated as absent.
+test_symlinked_pending_record_reads_as_undecided_not_absent() {
+  local home state corr rec external status open
+  home=$(setup_parent symlinked-pending-record-reader)
   state="$home/state"
   export FM_PENDING_REPLY_NOW=10500
   corr=$(fm_pending_reply_create "$home" "$state" hibit "symlink ownership")
@@ -1656,45 +1661,113 @@ test_symlinked_pending_record_is_not_owned_or_expired() {
   status="$state/hibit.status"
   printf 'blocked [key=pending-reply-%s]: pending-reply-missed: task=hibit pending-reply-id=%s request=symlink ownership\n' \
     "$corr" "$corr" > "$status"
-  [ -z "$(status_open_decisions "$status")" ] || fail "a symlinked record must not own an open decision"
-  export FM_PENDING_REPLY_NOW=10600
-  fm_pending_reply_tick "$state" || fail "tick failed on a symlinked record"
-  [ -L "$rec" ] || fail "tick should not retire a symlinked live record"
-  [ "$(fm_pending_reply_get "$external" phase)" = escalated ] || fail "tick followed a symlinked record"
-  pass "symlinked pending records are not owned or expired"
-}
-
-# A record reached through a symlink is not the owner's record: the classifier must not read
-# through it, and the owning library must not retire or rewrite what lies behind it.
-test_symlinked_pending_record_is_not_owned_or_expired() {
-  local home state corr rec external status
-  home=$(setup_parent symlinked-pending-record)
-  state="$home/state"
-  export FM_PENDING_REPLY_NOW=10500
-  corr=$(fm_pending_reply_create "$home" "$state" hibit "symlink ownership")
-  rec=$(fm_pending_reply_path "$state" "$corr")
-  external="$home/external-record"
-  mv "$rec" "$external" || fail "could not move record fixture"
-  fm_pending_reply_set "$external" phase escalated || fail "could not seed escalated fixture"
-  fm_pending_reply_set "$external" recovery_delivery_outcome confirmed || fail "could not seed delivery outcome"
-  fm_pending_reply_set "$external" recovery_turn_completed_epoch 10500 || fail "could not seed completion"
-  ln -s "$external" "$rec" || fail "could not create record symlink"
-  status="$state/hibit.status"
-  printf 'blocked [key=pending-reply-%s]: pending-reply-missed: task=hibit pending-reply-id=%s request=symlink ownership\n' \
-    "$corr" "$corr" > "$status"
-  # Undecided, never absent: a symlinked record keeps its decision visible rather than
-  # letting an object the owner never wrote either own or retire it. The stored row is
-  # unchanged by that uncertainty, which presentation reports instead.
+  # Reader half: a record reached through a symlink is not this owner's record, so membership
+  # cannot be decided from it at all. It stays OPEN rather than being read as absent, because
+  # inventing absence out of an unreadable object is how a real escalation disappears from the
+  # captain unnoticed, and the undecidable read must be reported, never baked into stored rows.
   open=$(status_open_decisions "$status")
   printf '%s' "$open" | grep -F "pending-reply-$corr" >/dev/null \
-    || fail "a symlinked record closed its decision instead of staying open: '$open'"
+    || fail "a symlinked record suppressed its decision instead of staying undecided and open: '$open'"
+  case "$open" in
+    *'[pending-reply-record-undecidable]'*)
+      fail "an undecidable read leaked into stored membership: '$open'" ;;
+  esac
   status_decision_record_undecidable "$status" "pending-reply-$corr" \
     || fail "a symlinked record did not read as undecided"
+  pass "a symlinked pending record reads as undecided and stays open without stored annotation"
+}
+
+# The writer half of the same rule: whatever the reader decides, the owning library must never act
+# THROUGH a symlink, because retiring or rewriting the object behind one would mutate a file the
+# owner never wrote. Kept separate from the reader case so both properties survive independently.
+test_symlinked_pending_record_is_never_retired_through_a_symlink() {
+  local home state corr rec external
+  home=$(setup_parent symlinked-pending-record-writer)
+  state="$home/state"
+  export FM_PENDING_REPLY_NOW=10500
+  corr=$(fm_pending_reply_create "$home" "$state" hibit "symlink ownership")
+  rec=$(fm_pending_reply_path "$state" "$corr")
+  external="$home/external-record"
+  mv "$rec" "$external" || fail "could not move record fixture"
+  fm_pending_reply_set "$external" phase escalated || fail "could not seed escalated fixture"
+  fm_pending_reply_set "$external" recovery_delivery_outcome confirmed || fail "could not seed delivery outcome"
+  fm_pending_reply_set "$external" recovery_turn_completed_epoch 10500 || fail "could not seed completion"
+  ln -s "$external" "$rec" || fail "could not create record symlink"
   export FM_PENDING_REPLY_NOW=10600
   fm_pending_reply_tick "$state" || fail "tick failed on a symlinked record"
   [ -L "$rec" ] || fail "tick should not retire a symlinked live record"
   [ "$(fm_pending_reply_get "$external" phase)" = escalated ] || fail "tick followed a symlinked record"
-  pass "symlinked pending records are neither owned nor expired"
+  pass "the tick neither retires nor follows a record reached through a symlink"
+}
+
+# Remove a planted `pending-replies` symlink without following it: [ -L ] answers "is this object a
+# link" for directories too, and rm only ever removes the link itself when the name is one.
+unlink_pending_replies_root() {  # <state-dir> <pending-replies-path>
+  local state=$1 dir=$2
+  if [ -L "$dir" ]; then
+    rm "$dir" || fail "could not remove the planted pending-replies symlink"
+  else
+    rm -rf "$dir" || fail "could not restore the pending-replies directory"
+  fi
+}
+
+# R-029: the tick must prove its own root before walking it.
+# R-029: the tick must prove its own root before walking it. Records are checked individually for
+# being regular non-symlink files, so that guard alone cannot see the case where the whole
+# `pending-replies` directory IS a link: every file inside then looks local and ordinary, and the
+# tick would retire another tree's records as its own. This pins the refusal from the outside.
+test_tick_refuses_to_process_a_symlinked_pending_replies_root() {
+  local home state dir external corr rec
+  home=$(setup_parent symlinked-pending-root)
+  state="$home/state"
+  dir=$(fm_pending_reply_dir "$state")
+  external="$home/external-tree"
+  mkdir -p "$external"
+  corr=$(fm_pending_reply_create "$home" "$state" hibit "root isolation")
+  rec=$(fm_pending_reply_path "$state" "$corr")
+  mv "$rec" "$external/$corr" || fail "could not relocate the record fixture"
+  rm -f "$dir" && rmdir "$dir" 2>/dev/null || true
+  ln -s "$external" "$dir" || fail "could not symlink the pending-replies root"
+  export FM_PENDING_REPLY_NOW=10600
+  fm_pending_reply_tick "$state" || fail "tick refused to run on a symlinked root"
+  [ "$(fm_pending_reply_get "$external/$corr" phase)" != expired ] \
+    || fail "the tick retired records through a symlinked pending-replies root"
+  [ -e "$external/$corr" ] || fail "the tick removed a record it does not own"
+  # Hand the planted link back before returning. Cleanup walks this tree recursively and refuses to
+  # descend through a symlinked directory, so leaving it in place would make teardown report
+  # failures on a path that belongs to no fixture at all.
+  unlink_pending_replies_root "$state" "$dir"
+  pass "the tick will not process records reached through a symlinked root"
+}
+
+# R-028: an expiry attempt that fails midway must not strand its temporary audit copy. That name
+# embeds this process id and a long-lived watcher keeps one pid across polls, so a leftover would
+# make every later attempt refuse on "already exists" and leave one escalated correlation open for
+# the rest of the daemon's life. The guard clears the name first and after each failure, so this
+# case plants exactly that residue and requires retirement to converge anyway.
+test_stranded_expiry_temp_does_not_block_retirement_forever() {
+  local home state corr rec expired_dir marker
+  home=$(setup_parent stranded-expiry-temp)
+  state="$home/state"
+  export FM_PENDING_REPLY_NOW=10500
+  corr=$(fm_pending_reply_create "$home" "$state" hibit "stranded temp")
+  rec=$(fm_pending_reply_path "$state" "$corr")
+  fm_pending_reply_set "$rec" phase escalated || fail "could not seed escalation"
+  fm_pending_reply_set "$rec" delivered_epoch 10400 || fail "could not seed delivery"
+  fm_pending_reply_set "$rec" recovery_delivery_outcome confirmed || fail "could not seed outcome"
+  fm_pending_reply_set "$rec" recovery_turn_completed_epoch 10400 || fail "could not seed completion"
+  expired_dir="$(fm_pending_reply_dir "$state")/expired"
+  mkdir -p "$expired_dir" || fail "could not create the audit directory"
+  # Plant the residue a previous failed attempt would have left at the same pid-derived name.
+  : > "$expired_dir/.${corr}.expired.tmp.$$" || fail "could not plant a stranded temp"
+  export FM_PENDING_REPLY_NOW=10700
+  fm_pending_reply_expire_escalated "$state" "$corr" \
+    || fail "expiry refused to converge because a stranded temp occupied its name"
+  [ -f "$expired_dir/$corr" ] || fail "expiry produced no audit copy after clearing the residue"
+  marker=$(fm_pending_reply_expired_marker_path "$state" "$corr")
+  [ -f "$marker" ] || fail "retirement published no expiry marker"
+  [ ! -e "$rec" ] || fail "the live record survived a completed retirement"
+  pass "a stranded expiry temp is cleared instead of blocking that correlation forever"
 }
 
 test_escalated_undelivered_correlation_stays_retryable() {
@@ -1798,7 +1871,9 @@ test_expired_phase_residue_is_reclaimed_on_tick
 test_expiry_recovers_when_marker_publish_is_interrupted
 test_retired_pending_record_does_not_replay_open_decision
 test_recordless_pending_key_stays_open_and_reports_undecidable
-test_symlinked_pending_record_is_not_owned_or_expired
+test_symlinked_pending_record_reads_as_undecided_not_absent
+test_symlinked_pending_record_is_never_retired_through_a_symlink
+test_tick_refuses_to_process_a_symlinked_pending_replies_root
 test_remote_repost_waits_for_the_reply_channel
 test_mirrored_remote_reply_never_triggers_a_repost
 test_same_basename_self_home_corr_resolves_on_tick
@@ -1807,6 +1882,7 @@ test_child_status_wrong_home_is_not_copied
 test_mechanical_helper_writes_parent_channel
 test_remote_parent_replies_is_not_wrong_home
 test_local_parent_replies_is_wrong_home_evidence
+test_stranded_expiry_temp_does_not_block_retirement_forever
 test_escalated_undelivered_correlation_stays_retryable
 
 printf 'ok - all pending-reply tests passed\n'

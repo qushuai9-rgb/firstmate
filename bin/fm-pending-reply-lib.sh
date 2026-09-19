@@ -1269,11 +1269,21 @@ _fm_pending_reply_expire_escalated_locked() {  # <state-dir> <corr_id>
   [ ! -e "$target" ] || return 1
 
   expired_tmp="$expired_dir/.${corr}.expired.tmp.$$"
-  [ ! -e "$expired_tmp" ] || return 1
-  cp "$rec" "$expired_tmp" || return 1
-  fm_pending_reply_set "$expired_tmp" phase expired || return 1
-  fm_pending_reply_set "$expired_tmp" expired_epoch "$now" || return 1
-  mv "$expired_tmp" "$target" || return 1
+  # A leftover temp is not merely untidy here: the path embeds this process id, and a long-lived
+  # watcher reuses one pid across polls, so a refusal on "already exists" would block this
+  # correlation for the rest of the daemon's life after any single failed step. Clear the stranded
+  # name first and remove it again on every later failure, so the audit copy is either complete or
+  # absent and a retry always has a clean path to work from.
+  if [ -e "$expired_tmp" ] || [ -L "$expired_tmp" ]; then
+    rm -f "$expired_tmp" || return 1
+  fi
+  cp "$rec" "$expired_tmp" || { rm -f "$expired_tmp"; return 1; }
+  fm_pending_reply_set "$expired_tmp" phase expired \
+    || { rm -f "$expired_tmp"; return 1; }
+  fm_pending_reply_set "$expired_tmp" expired_epoch "$now" \
+    || { rm -f "$expired_tmp"; return 1; }
+  mv "$expired_tmp" "$target" \
+    || { rm -f "$expired_tmp"; return 1; }
   rm -f "$rec" || return 1
   fm_pending_reply_write_expired_marker "$state" "$corr" "$now"
 }
@@ -1544,7 +1554,11 @@ fm_pending_reply_tick() {  # <state-dir>
   local observation observation_task found i
   local -a observation_tasks=() observation_values=()
   dir=$(fm_pending_reply_dir "$state")
-  [ -d "$dir" ] || return 0
+  # Prove the root itself before enumerating anything under it. A per-record regular-file check is
+  # not enough: if `pending-replies` is a symlink to another tree, ordinary files there pass
+  # record_is_safe and get adopted as this owner's state. The classifier already refuses to read
+  # through such a directory, so the writer must refuse to act through one too.
+  { [ -d "$dir" ] && [ ! -L "$dir" ]; } || return 0
   expired_dir="$dir/expired"
   for rec in "$expired_dir"/*; do
     fm_pending_reply_record_is_safe "$rec" || continue
