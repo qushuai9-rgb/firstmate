@@ -271,12 +271,17 @@ fm_control_harness_turnend_token_path() {  # <harness> <state-dir> <id>
   esac
 }
 
-fm_control_harness_turnend_auth_path() {  # <harness> <token>
-  local harness=${1-} token=${2-}
+fm_control_harness_turnend_auth_path() {  # <harness> <token> [share-dir]
+  local harness=${1-} token=${2-} share_dir=${3:-}
   case "$token" in ''|*[!A-Za-z0-9._-]*) return 0 ;; esac
   case "$harness" in
     grok) printf '%s\n' "${GROK_HOME:-$HOME/.grok}/hooks/fm-turn-end.d/$token" ;;
-    kimi) printf '%s\n' "$HOME/.kimi-code/fm-turn-end.d/$token" ;;
+    kimi)
+      [ -n "$share_dir" ] || share_dir="${KIMI_SHARE_DIR:-${HOME:-}/.kimi}"
+      case "$share_dir" in
+        /*) printf '%s\n' "$share_dir/fm-turn-end.d/$token" ;;
+      esac
+      ;;
     *) return 0 ;;
   esac
 }

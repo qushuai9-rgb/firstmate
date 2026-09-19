@@ -1239,12 +1239,13 @@ remove_grok_turnend_auth() {
 }
 
 remove_kimi_turnend_auth() {
-  local state_dir=$1 id=$2 token_path token='' path
+  local state_dir=$1 id=$2 token_path token='' share_dir='' path
   token_path=$(fm_control_harness_turnend_token_path kimi "$state_dir" "$id") || return 1
   if [ -n "$token_path" ] && [ -f "$token_path" ]; then
     IFS= read -r token < "$token_path" || [ -n "$token" ] || return 1
+    share_dir=$(sed -n 's/^share_dir=//p' "$token_path" | head -1)
   fi
-  path=$(fm_control_harness_turnend_auth_path kimi "$token") || return 1
+  path=$(fm_control_harness_turnend_auth_path kimi "$token" "$share_dir") || return 1
   [ -n "$path" ] || return 0
   rm -f -- "$path"
 }

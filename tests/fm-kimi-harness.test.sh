@@ -20,7 +20,7 @@ KIMI_RUNTIME_TASK_TMP=
 PYTHON_BIN=$(command -v python3) || fail "test needs python3"
 PYTHON_BIN_DIR=$(dirname "$PYTHON_BIN")
 JQ_BIN=$(command -v jq) || fail "test needs jq"
-BASE_PATH=${FM_TEST_BASE_PATH:-$PYTHON_BIN_DIR:/usr/bin:/bin:/usr/sbin:/sbin}
+BASE_PATH=${FM_TEST_BASE_PATH:-/usr/bin:/bin:/usr/sbin:/sbin}
 
 cleanup_kimi_harness() {
   [ -z "$KIMI_RUNTIME_TASK_TMP" ] || rm -rf "$KIMI_RUNTIME_TASK_TMP"
@@ -39,7 +39,7 @@ state=$(cat "$FM_FAKE_KIMI_STATE" 2>/dev/null || true)
 fake_screen() {
   case "$state" in
     ready)
-      printf 'Welcome to Kimi Code!\ncontext: 0%% (0/256k)\n╭────────────────────────────────╮\n│ >                              │\n╰────────────────────────────────╯\n'
+      printf 'Welcome to Kimi Code CLI!\ncontext: 0%% (0/256k)\n╭────────────────────────────────╮\n│ >                              │\n╰────────────────────────────────╯\n'
       ;;
     pointer-typed)
       printf 'context: 0%% (0/256k)\n╭────────────────────────────────╮\n│ > Read the brief and follow it │\n│                                │\n╰────────────────────────────────╯\n'
@@ -76,7 +76,7 @@ case "${1:-}" in
     done
     if [ -n "$literal" ]; then
       case "$literal" in
-        *' --auto')
+        *' --auto-approve')
           printf '%s\n' "$literal" >> "$FM_FAKE_LAUNCH_LOG"
           printf 'launched\n' > "$FM_FAKE_KIMI_STATE"
           ;;
@@ -135,6 +135,7 @@ SH
   fm_fake_exit0 "$fakebin" treehouse gh-axi gh
   fm_fake_exit0 "$fakebin" kimi
   ln -s "$JQ_BIN" "$fakebin/jq"
+  ln -s "$PYTHON_BIN" "$fakebin/python3"
   printf '%s\n' "$fakebin"
 }
 
@@ -145,8 +146,8 @@ make_spawn_case() {
   proj="$case_dir/project"
   wt="$case_dir/wt"
   fakebin=$(make_spawn_fakebin "$case_dir/fake")
-  mkdir -p "$home/data/$id" "$home/projects" "$home/state" "$home/config" "$home/.kimi-code"
-  printf '# Kimi test config\ndefault_model = "test"\n' > "$home/.kimi-code/config.toml"
+  mkdir -p "$home/data/$id" "$home/projects" "$home/state" "$home/config" "$home/.kimi"
+  printf '# Kimi test config\ndefault_model = "test"\n' > "$home/.kimi/config.toml"
   cat > "$home/data/$id/brief.md" <<'EOF'
 # Task
 ## Captain's intent
@@ -206,8 +207,8 @@ test_kimi_launch_then_send_is_verified() {
   assert_contains "$out" "spawned $id harness=kimi" "kimi spawn did not report success"
 
   launch=$(cat "$CASE_DIR/launch.log")
-  [ "$launch" = "env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI '$FAKEBIN_DIR/kimi' --model 'kimi-code/k3' --auto" ] \
-    || fail "kimi launch did not use the absolute binary, model, and --auto only: $launch"
+  [ "$launch" = "env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI KIMI_SHARE_DIR='$HOME_DIR/.kimi' '$FAKEBIN_DIR/kimi' --model 'kimi-code/k3' --auto-approve" ] \
+    || fail "kimi launch did not use the absolute binary, model, and --auto-approve only: $launch"
   assert_not_contains "$launch" "--effort" "kimi launch emitted a nonexistent effort flag"
   assert_not_contains "$launch" "turn-ended" "kimi launch embedded a turn-end path"
   assert_not_contains "$launch" "__TURNEND__" "kimi launch retained a turn-end placeholder"
@@ -226,20 +227,55 @@ test_kimi_launch_then_send_is_verified() {
   assert_grep "export FM_TASK_ID=$id" "$CASE_DIR/tmux-calls.log" \
     "kimi spawn did not mark the pane with its task id"
   assert_grep 'BEGIN FIRSTMATE KIMI TURN-END HOOK' "$HOME_DIR/.kimi-code/config.toml" \
+
     "kimi spawn did not install its guarded global hook region"
   assert_grep 'token=' "$WT_DIR/.fm-kimi-turnend" "kimi spawn did not write its token pointer"
   assert_present "$HOME_DIR/state/$id.kimi-turnend-token" "kimi spawn did not record its token"
   pass "fm-spawn: kimi launches, delivers its brief, and registers a guarded turn-end token"
 }
 
+test_kimi_custom_share_dir_is_used_by_launch_hook_and_cleanup() {
+  local id rec out rc custom launch token
+  id=kimi-custom-share-z9
+  rec=$(make_spawn_case custom-share "$id")
+  read_spawn_record "$rec"
+  custom="$CASE_DIR/custom kimi share"
+  mkdir -p "$custom"
+  printf '# Custom Kimi config\ndefault_model = "test"\n' > "$custom/config.toml"
+  out=$(KIMI_SHARE_DIR="$custom" run_spawn \
+    "$CASE_DIR" "$HOME_DIR" "$PROJ_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id")
+  rc=$?
+  expect_code 0 "$rc" "Kimi spawn with KIMI_SHARE_DIR should succeed"
+  launch=$(cat "$CASE_DIR/launch.log")
+  assert_contains "$launch" "KIMI_SHARE_DIR='$custom'" \
+    "Kimi launch did not export the configured share directory"
+  assert_present "$custom/fm-turn-end.sh" "Kimi hook was not installed in configured share directory"
+  assert_grep "$custom/fm-turn-end.sh" "$custom/config.toml" \
+    "Kimi config did not reference the hook in configured share directory"
+  token=$(sed -n 's/^token=//p' "$WT_DIR/.fm-kimi-turnend")
+  assert_present "$custom/fm-turn-end.d/$token" \
+    "Kimi registry token was not created in configured share directory"
+  assert_grep "share_dir=$custom" "$HOME_DIR/state/$id.kimi-turnend-token" \
+    "Kimi token record did not retain the configured share directory"
+  HOME="$HOME_DIR" FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$HOME_DIR" \
+    FM_STATE_OVERRIDE="$HOME_DIR/state" FM_DATA_OVERRIDE="$HOME_DIR/data" \
+    FM_PROJECTS_OVERRIDE="$HOME_DIR/projects" FM_CONFIG_OVERRIDE="$HOME_DIR/config" \
+    FM_SPAWN_NO_GUARD=1 KIMI_SHARE_DIR="$custom" PATH="$FAKEBIN_DIR:$BASE_PATH" \
+    "$TEARDOWN" "$id" --force >/dev/null 2>&1 \
+    || fail "Kimi custom share directory teardown failed"
+  assert_absent "$custom/fm-turn-end.d/$token" \
+    "Kimi teardown left the custom registry token"
+  pass "fm-spawn: KIMI_SHARE_DIR is shared by launch, hook config, registry, and cleanup"
+}
+
 test_kimi_hook_install_is_surgical_idempotent_and_removable() {
   local home config original once stripped count
   home="$TMP_ROOT/config-surgery"
-  config="$home/.kimi-code/config.toml"
+  config="$home/.kimi/config.toml"
   original="$home/original.toml"
   once="$home/once.toml"
   stripped="$home/stripped.toml"
-  mkdir -p "$home/.kimi-code"
+  mkdir -p "$home/.kimi"
   cat > "$config" <<'EOF'
 # Captain's leading comment stays exactly here.
 
@@ -272,19 +308,19 @@ EOF
   cp "$config" "$stripped"
   cmp -s "$original" "$stripped" \
     || fail "config with the Firstmate region excised was not byte-identical to the original"
-  assert_absent "$home/.kimi-code/fm-turn-end.sh" "removal left the Firstmate hook script"
-  assert_absent "$home/.kimi-code/fm-turn-end.d" "removal left the Firstmate registry"
+  assert_absent "$home/.kimi/fm-turn-end.sh" "removal left the Firstmate hook script"
+  assert_absent "$home/.kimi/fm-turn-end.d" "removal left the Firstmate registry"
   pass "Kimi hook install is idempotent and removal restores every foreign config byte"
 }
 
 test_kimi_hook_remove_preserves_owned_newline_boundary() {
   local appended config expected home original
   home="$TMP_ROOT/config-owned-newline"
-  config="$home/.kimi-code/config.toml"
+  config="$home/.kimi/config.toml"
   original="$home/original.toml"
   expected="$home/expected.toml"
   appended="$home/appended.toml"
-  mkdir -p "$home/.kimi-code"
+  mkdir -p "$home/.kimi"
   printf 'default_model = "test"' > "$config"
   cp "$config" "$original"
 
@@ -319,31 +355,31 @@ test_kimi_hook_fails_closed_on_missing_malformed_or_partial_config() {
   missing="$TMP_ROOT/config-missing"
   malformed="$TMP_ROOT/config-malformed"
   partial="$TMP_ROOT/config-partial"
-  mkdir -p "$missing/.kimi-code" "$malformed/.kimi-code" "$partial/.kimi-code"
+  mkdir -p "$missing/.kimi" "$malformed/.kimi" "$partial/.kimi"
 
   rc=0
   out=$(HOME="$missing" "$KIMI_HOOK" install 2>&1) || rc=$?
   [ "$rc" -ne 0 ] || fail "missing Kimi config was accepted"
   assert_contains "$out" "Kimi config is missing" "missing config refusal lacked its concrete reason"
-  assert_absent "$missing/.kimi-code/fm-turn-end.sh" "missing config refusal wrote the hook script"
+  assert_absent "$missing/.kimi/fm-turn-end.sh" "missing config refusal wrote the hook script"
 
-  printf '[broken\n' > "$malformed/.kimi-code/config.toml"
-  cp "$malformed/.kimi-code/config.toml" "$malformed/before"
+  printf '[broken\n' > "$malformed/.kimi/config.toml"
+  cp "$malformed/.kimi/config.toml" "$malformed/before"
   rc=0
   out=$(HOME="$malformed" "$KIMI_HOOK" install 2>&1) || rc=$?
   [ "$rc" -ne 0 ] || fail "malformed Kimi config was accepted"
   assert_contains "$out" "malformed TOML" "malformed config refusal lacked its concrete reason"
-  cmp -s "$malformed/before" "$malformed/.kimi-code/config.toml" \
+  cmp -s "$malformed/before" "$malformed/.kimi/config.toml" \
     || fail "malformed config refusal changed config bytes"
-  assert_absent "$malformed/.kimi-code/fm-turn-end.sh" "malformed config refusal wrote the hook script"
+  assert_absent "$malformed/.kimi/fm-turn-end.sh" "malformed config refusal wrote the hook script"
 
-  printf '# BEGIN FIRSTMATE KIMI TURN-END HOOK\n' > "$partial/.kimi-code/config.toml"
-  cp "$partial/.kimi-code/config.toml" "$partial/before"
+  printf '# BEGIN FIRSTMATE KIMI TURN-END HOOK\n' > "$partial/.kimi/config.toml"
+  cp "$partial/.kimi/config.toml" "$partial/before"
   rc=0
   out=$(HOME="$partial" "$KIMI_HOOK" install 2>&1) || rc=$?
   [ "$rc" -ne 0 ] || fail "partial Firstmate marker was accepted"
   assert_contains "$out" "partial, duplicated, or altered" "partial marker refusal lacked its concrete reason"
-  cmp -s "$partial/before" "$partial/.kimi-code/config.toml" \
+  cmp -s "$partial/before" "$partial/.kimi/config.toml" \
     || fail "partial marker refusal changed config bytes"
   pass "Kimi hook install refuses missing, malformed, and surprising config without writing"
 }
@@ -351,10 +387,10 @@ test_kimi_hook_fails_closed_on_missing_malformed_or_partial_config() {
 test_kimi_hook_install_refuses_without_jq() {
   local home config before fakebin out rc
   home="$TMP_ROOT/config-no-jq"
-  config="$home/.kimi-code/config.toml"
+  config="$home/.kimi/config.toml"
   before="$home/config-before.toml"
   fakebin=$(fm_fakebin "$home/no-jq")
-  mkdir -p "$home/.kimi-code"
+  mkdir -p "$home/.kimi"
   printf '# Captain config\nmodel = "test"\n' > "$config"
   cp "$config" "$before"
   ln -s "$(command -v bash)" "$fakebin/bash"
@@ -365,8 +401,8 @@ test_kimi_hook_install_refuses_without_jq() {
   [ "$rc" -ne 0 ] || fail "Kimi hook install succeeded without jq"
   assert_contains "$out" "jq is required" "missing-jq refusal did not name jq"
   cmp -s "$before" "$config" || fail "missing-jq refusal changed config bytes"
-  assert_absent "$home/.kimi-code/fm-turn-end.sh" "missing-jq refusal wrote the hook script"
-  assert_absent "$home/.kimi-code/fm-turn-end.d" "missing-jq refusal wrote the registry"
+  assert_absent "$home/.kimi/fm-turn-end.sh" "missing-jq refusal wrote the hook script"
+  assert_absent "$home/.kimi/fm-turn-end.d" "missing-jq refusal wrote the registry"
   pass "Kimi hook install refuses without jq before any config write"
 }
 
@@ -378,10 +414,10 @@ test_kimi_hook_is_silent_and_requires_registered_workspace_token() {
   out=$(run_spawn "$CASE_DIR" "$HOME_DIR" "$PROJ_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id")
   rc=$?
   expect_code 0 "$rc" "Kimi spawn should succeed before hook authentication checks"
-  hook="$HOME_DIR/.kimi-code/fm-turn-end.sh"
+  hook="$HOME_DIR/.kimi/fm-turn-end.sh"
   target="$HOME_DIR/state/$id.turn-ended"
   token=$(sed -n 's/^token=//p' "$WT_DIR/.fm-kimi-turnend")
-  assert_present "$HOME_DIR/.kimi-code/fm-turn-end.d/$token" "Kimi registry token is missing"
+  assert_present "$HOME_DIR/.kimi/fm-turn-end.d/$token" "Kimi registry token is missing"
 
   no_token="$CASE_DIR/no-token-workspace"
   mkdir -p "$no_token"
@@ -420,7 +456,7 @@ test_kimi_spawn_refuses_unsafe_global_config_before_pane_creation() {
   id=kimi-config-refuse-z7
   rec=$(make_spawn_case config-refuse "$id")
   read_spawn_record "$rec"
-  printf '[malformed\n' > "$HOME_DIR/.kimi-code/config.toml"
+  printf '[malformed\n' > "$HOME_DIR/.kimi/config.toml"
   rc=0
   out=$(run_spawn "$CASE_DIR" "$HOME_DIR" "$PROJ_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id") || rc=$?
   [ "$rc" -ne 0 ] || fail "Kimi spawn accepted malformed global config"
@@ -447,7 +483,7 @@ test_kimi_teardown_removes_pointer_and_registry_token() {
     FM_SPAWN_NO_GUARD=1 PATH="$FAKEBIN_DIR:$BASE_PATH" \
     "$TEARDOWN" "$id" --force >/dev/null 2>&1 || fail "Kimi teardown failed"
   assert_absent "$WT_DIR/.fm-kimi-turnend" "Kimi token pointer survived teardown"
-  assert_absent "$HOME_DIR/.kimi-code/fm-turn-end.d/$token" "Kimi registry token survived teardown"
+  assert_absent "$HOME_DIR/.kimi/fm-turn-end.d/$token" "Kimi registry token survived teardown"
   assert_absent "$HOME_DIR/state/$id.kimi-turnend-token" "Kimi token state survived teardown"
   pass "fm-teardown: Kimi task pointer and registry token are removed"
 }
@@ -458,14 +494,14 @@ test_kimi_falls_back_to_expanded_home_binary() {
   rec=$(make_spawn_case fallback "$id")
   read_spawn_record "$rec"
   rm "$FAKEBIN_DIR/kimi"
-  fallback="$HOME_DIR/.kimi-code/bin/kimi"
+  fallback="$HOME_DIR/.kimi/bin/kimi"
   mkdir -p "$(dirname "$fallback")"
   fm_fake_exit0 "$(dirname "$fallback")" kimi
   out=$(run_spawn "$CASE_DIR" "$HOME_DIR" "$PROJ_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id")
   rc=$?
   expect_code 0 "$rc" "Kimi HOME fallback spawn should succeed"
   launch=$(cat "$CASE_DIR/launch.log")
-  [ "$launch" = "env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI '$fallback' --auto" ] \
+  [ "$launch" = "env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI KIMI_SHARE_DIR='$HOME_DIR/.kimi' '$fallback' --auto-approve" ] \
     || fail "Kimi fallback did not expand HOME into an absolute executable: $launch"
   pass "fm-spawn: Kimi fallback expands the active HOME"
 }
@@ -476,7 +512,7 @@ test_kimi_missing_binary_refuses_before_pane_creation() {
   rec=$(make_spawn_case missing "$id")
   read_spawn_record "$rec"
   rm "$FAKEBIN_DIR/kimi"
-  fallback="$HOME_DIR/.kimi-code/bin/kimi"
+  fallback="$HOME_DIR/.kimi/bin/kimi"
   rc=0
   out=$(run_spawn "$CASE_DIR" "$HOME_DIR" "$PROJ_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id") || rc=$?
   [ "$rc" -ne 0 ] || fail "missing Kimi executable should refuse the spawn"
@@ -681,7 +717,8 @@ test_kimi_bordered_prompt_needs_no_override() {
   pass "composer classifier: kimi's existing bordered > shape is already safe without an override"
 }
 
-test_kimi_hook_install_is_surgical_idempotent_and_removable
+test_kimi_custom_share_dir_is_used_by_launch_hook_and_cleanup
+ test_kimi_hook_install_is_surgical_idempotent_and_removable
 test_kimi_hook_remove_preserves_owned_newline_boundary
 test_kimi_hook_fails_closed_on_missing_malformed_or_partial_config
 test_kimi_hook_install_refuses_without_jq

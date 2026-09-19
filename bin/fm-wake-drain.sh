@@ -2,8 +2,9 @@
 # Present durable watcher wake records, retire rows no actor could ever consume,
 # optionally acknowledge handled records,
 # annotate every unread line for validated signal status keys, surface unread
-# informational status lines, latest captain-facing statuses not covered by a
-# newer branch outcome, OPEN DECISIONS, and captain-call record divergence,
+# informational status lines and secondmate parent reports, latest captain-facing
+# statuses not covered by a newer branch outcome, OPEN DECISIONS, and captain-
+# call record divergence,
 # then assert liveness.
 #
 # Keep sequence-bound row consumption independent from generation-bound episode
@@ -350,6 +351,7 @@ print_status_outcome_backstop_section() {  # <task-and-endpoint-snapshot>
         [ -z "$key" ] || continue
         ;;
     esac
+    status_line_is_secondmate_parent_surface "$STATE" "$task" "$event" && continue
     load_branch_outcome_index "$task"
     if [ "$BRANCH_OUTCOME_INDEX_STATE" != ok ]; then
       rc=2
@@ -394,12 +396,13 @@ EOF
   fi
 }
 
-# Print still-unread informational status lines (note: answers and pending-reply
-# resolutions) that the OPEN DECISIONS fold never carries. Uses the same
-# cursor-backed unread span as the annotation path, and runs on every drain -
-# including the empty-queue fast path - so a buried answer cannot be swallowed
-# when the fold later advances the cursor. Prints nothing when nothing is
-# unread, which is the common case.
+# Print still-unread status lines that the OPEN DECISIONS fold never carries:
+# informational notes and pending-reply resolutions, plus the correlated done or
+# keyed paused/failed reports of recorded secondmates. Uses the same cursor-
+# backed unread span as the annotation path, and runs on every drain - including
+# the empty-queue fast path - so a buried report cannot be swallowed when the
+# fold later advances the cursor. Prints nothing when nothing is unread, which
+# is the common case.
 print_unread_status_section() {
   local snapshot=${1:-} unread task line shown=0
 

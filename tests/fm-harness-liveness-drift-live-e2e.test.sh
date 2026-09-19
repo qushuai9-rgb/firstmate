@@ -92,8 +92,8 @@ resolve_harness_binary() {  # <harness>
     printf '%s\n' "$candidate"
     return 0
   fi
-  if [ "$harness" = kimi ] && [ -n "${HOME:-}" ] && [ -x "$HOME/.kimi-code/bin/kimi" ]; then
-    printf '%s\n' "$HOME/.kimi-code/bin/kimi"
+  if [ "$harness" = kimi ] && [ -n "${HOME:-}" ] && [ -x "${KIMI_SHARE_DIR:-$HOME/.kimi}/bin/kimi" ]; then
+    printf '%s\n' "${KIMI_SHARE_DIR:-$HOME/.kimi}/bin/kimi"
     return 0
   fi
   return 1

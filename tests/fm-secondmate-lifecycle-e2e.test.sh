@@ -22,7 +22,7 @@
 #   - a bare `fm-<id>` send targets the window recorded in THIS home's meta
 #   - backlog items move verbatim into the subhome and leave the main backlog
 #   - recovery respawns from the durable registry + persistent home
-#   - a control relaunch re-derives the continuation policy from the standing charter
+#   - a control relaunch preserves the incarnation's own durable continuation policy
 #   - teardown removes meta and the registry route only after removing the home
 set -u
 

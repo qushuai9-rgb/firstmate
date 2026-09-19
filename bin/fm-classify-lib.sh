@@ -1524,7 +1524,11 @@ $fully_presented
       while IFS= read -r line || [ -n "$line" ]; do
         case "$line" in
           *[![:space:]]*)
-            if status_line_is_unread_surface "$line"; then safe=true; break; fi
+            if status_line_is_unread_surface "$line" \
+              || status_line_is_secondmate_parent_surface "$state" "$task" "$line"; then
+              safe=true
+              break
+            fi
             ;;
         esac
       done <<EOF
@@ -1739,6 +1743,36 @@ status_line_is_unread_surface() {  # <status-line>
   return 1
 }
 
+# 0 when a report on a recorded secondmate's parent channel needs its own
+# one-shot presentation. A correlated done report, and a keyed paused or failed
+# report, can otherwise be hidden by an older open pending-reply decision in the
+# same append-only stream. Keep this narrower than status_is_captain_relevant:
+# ordinary crew terminal and pause lines retain their established paths.
+status_line_is_secondmate_parent_surface() {  # <state> <task-id> <status-line>
+  local state=$1 task=$2 line=$3 meta verb key prefix
+  meta="$state/$task.meta"
+  [ -f "$meta" ] && [ -r "$meta" ] && [ ! -L "$meta" ] || return 1
+  [ "$(grep '^kind=' "$meta" 2>/dev/null | tail -1 | cut -d= -f2-)" = secondmate ] || return 1
+  verb=$(status_line_verb "$line")
+  case "$verb" in
+    done)
+      prefix=${line%%:*}
+      [[ "$prefix" =~ (^|[[:space:]])\[corr=[[:xdigit:]]{16}\]($|[[:space:]]) ]]
+      return
+      ;;
+    paused|failed)
+      if _fm_key_before_colon "$line"; then
+        :
+      else
+        _fm_key_at_note_head "$line" >/dev/null || return 1
+      fi
+      key=$(_fm_decision_key "$line") || return 1
+      [ -n "$key" ]
+      ;;
+    *) return 1 ;;
+  esac
+}
+
 # Fleet-wide unread informational lines: one "<task>\t<status-line>" row per
 # still-unread `note:` or pending-reply resolution, in glob (task id) order.
 # Prints nothing when none are unread. Directory scan rejects status symlinks
@@ -1752,7 +1786,9 @@ scan_unread_surface_lines() {  # <state>
     [ -n "$lines" ] || continue
     while IFS= read -r line; do
       [ -n "$line" ] || continue
-      status_line_is_unread_surface "$line" || continue
+      status_line_is_unread_surface "$line" \
+        || status_line_is_secondmate_parent_surface "$state" "$task" "$line" \
+        || continue
       printf '%s\t%s\n' "$task" "$line"
     done <<EOF
 $lines
@@ -1770,7 +1806,9 @@ scan_unread_surface_snapshot() {  # <state> <task-and-endpoint-snapshot>
     [ -n "$lines" ] || continue
     while IFS= read -r line; do
       [ -n "$line" ] || continue
-      status_line_is_unread_surface "$line" || continue
+      status_line_is_unread_surface "$line" \
+        || status_line_is_secondmate_parent_surface "$state" "$task" "$line" \
+        || continue
       printf '%s\t%s\n' "$task" "$line"
     done <<EOF
 $lines

@@ -137,6 +137,53 @@ test_no_profile_keeps_claude_profile_defaults() {
   pass "no --model/--effort records defaults and types the claude launch instructions"
 }
 
+test_pi_night_fallback_uses_dasein_without_dispatch_profile() {
+  local rec id out status launch
+  id=profile-pi-night-fallback-z1a
+  rec=$(make_spawn_case profile-pi-night-fallback pi "$id")
+  read_case_record "$rec"
+  cat > "$FAKEBIN_DIR/date" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  +%H) printf '23\n' ;;
+  +%u) printf '7\n' ;;
+  *) exec /bin/date "$@" ;;
+esac
+SH
+  chmod +x "$FAKEBIN_DIR/date"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
+  status=$?
+  expect_code 0 "$status" "Pi spawn without a dispatch profile should use the nighttime fallback"
+  assert_meta_profile "$HOME_DIR/state/$id.meta" pi dasein/gpt-5.6-luna default
+  launch=$(cat "$LAUNCH_LOG")
+  assert_contains "$launch" "--model 'dasein/gpt-5.6-luna'" \
+    "Pi nighttime fallback did not pass Dasein GPT-5.6 Luna to the launch"
+  pass "Pi nighttime fallback uses Dasein GPT-5.6 Luna when no dispatch profile supplies a model"
+}
+
+test_pi_weekend_daytime_fallback_uses_dasein_without_dispatch_profile() {
+  local rec id out status
+  id=profile-pi-weekend-fallback-z1b
+  rec=$(make_spawn_case profile-pi-weekend-fallback pi "$id")
+  read_case_record "$rec"
+  cat > "$FAKEBIN_DIR/date" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  +%H) printf '12\n' ;;
+  +%u) printf '6\n' ;;
+  *) exec /bin/date "$@" ;;
+esac
+SH
+  chmod +x "$FAKEBIN_DIR/date"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
+  status=$?
+  expect_code 0 "$status" "weekend daytime Pi spawn should use the Dasein fallback"
+  assert_meta_profile "$HOME_DIR/state/$id.meta" pi dasein/gpt-5.6-luna default
+  pass "Pi weekend daytime fallback uses Dasein GPT-5.6 Luna"
+}
+
 test_non_cursor_launch_clears_inherited_cursor_markers() {
   local rec id out status launch
   id=profile-claude-cursor-markers-z1b
@@ -720,6 +767,8 @@ test_pi_threads_model_and_max_effort() {
   launch=$(cat "$LAUNCH_LOG")
   assert_contains "$launch" "FM_PI_HARNESS=pi '$FAKEBIN_DIR/pi' --tui-mode regular --model 'openai-codex/gpt-5.6-sol' --thinking 'max' -e" \
     "pi launch did not force the regular TUI while threading the requested model and max thinking level"
+  assert_not_contains "$launch" "FM_SECOND_MATE=1" \
+    "ordinary pi launch unexpectedly enabled the secondmate watchdog"
   assert_not_contains "$launch" "FM_FIRSTMATE_PI_LAUNCH_BRIEF=" \
     "pi launch still exports the removed Calm input-reroute binding"
   assert_contains "$launch" "fm-operational-input.sh' encode launch-brief" \
@@ -836,8 +885,12 @@ test_pi_signed_persistent_secondmate_uses_pi_extensions_and_identity() {
   assert_absent "$HOME_DIR/data/$id/launch-brief.md" "secondmate launch received a worker overlay"
   launch=$(cat "$LAUNCH_LOG")
   assert_contains "$launch" "< '$sm/data/charter.md'" "secondmate launch lost its original charter"
-  assert_contains "$launch" "FM_PI_HARNESS=pi-signed '$FAKEBIN_DIR/pi-signed' --tui-mode regular -e '$sm/.pi/extensions/fm-primary-turnend-guard.ts' -e '$sm/.pi/extensions/fm-primary-pi-watch.ts'" \
-    "pi-signed secondmate did not force the regular TUI with Pi's primary extension launch shape"
+  assert_contains "$launch" "FM_SECOND_MATE=1" \
+    "pi-signed secondmate did not enable the watchdog marker"
+  assert_contains "$launch" "FM_PI_HARNESS=pi-signed" \
+    "pi-signed secondmate did not preserve its harness identity"
+  assert_contains "$launch" "'$FAKEBIN_DIR/pi-signed' --tui-mode regular -e '$sm/.pi/extensions/fm-primary-turnend-guard.ts' -e '$sm/.pi/extensions/fm-primary-pi-watch.ts' -e '$sm/.pi/extensions/fm-secondmate-bash-watchdog.ts'" \
+    "pi-signed secondmate did not load the watchdog with Pi's primary extension launch shape"
   if [ "${FM_TEST_EVIDENCE:-0}" = 1 ]; then
     printf '# evidence begin: persistent secondmate\n%s\n' "$out"
     printf 'launch command:\n%s\noriginal charter:\n' "$launch"
@@ -1416,6 +1469,8 @@ test_non_claude_harness_ignores_claude_permission_mode() {
 
 test_worker_launch_delivers_role_scope
 test_no_profile_keeps_claude_profile_defaults
+test_pi_night_fallback_uses_dasein_without_dispatch_profile
+test_pi_weekend_daytime_fallback_uses_dasein_without_dispatch_profile
 test_non_cursor_launch_clears_inherited_cursor_markers
 test_relative_home_overrides_launch_with_absolute_cross_process_paths
 test_home_defaults_preserve_absolute_or_resolve_relative_paths

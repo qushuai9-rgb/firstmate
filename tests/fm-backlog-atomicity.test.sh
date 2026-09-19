@@ -486,8 +486,8 @@ SH
 interrupt_kimi_readiness() {  # <case-dir>
   local case_dir=$1 home
   home=$(home_of "$case_dir")
-  mkdir -p "$home/.kimi-code"
-  printf '# test config\n' > "$home/.kimi-code/config.toml"
+  mkdir -p "$home/.kimi"
+  printf '# test config\n' > "$home/.kimi/config.toml"
   fm_fake_exit0 "$case_dir/fakebin" kimi
   cat > "$case_dir/fakebin/tmux" <<SH
 #!/usr/bin/env bash

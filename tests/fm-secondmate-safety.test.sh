@@ -2835,6 +2835,8 @@ EOF
   assert_contains "$(cat "$status_file")" \
     'blocked [corr=0123456789abcdef]: provider request failed' \
     "provider-error reporting path did not publish a blocked status"
+  grep -F 'provider or upstream error aborts a task' "$brief" >/dev/null \
+    || fail "charter brief does not require a blocked/failed status for provider errors"
   grep -F 'go idle and wait silently for the main firstmate' "$brief" >/dev/null \
     || fail "charter brief does not tell the secondmate to go idle and wait for routed work"
   grep -F 'Act only on tasks the main firstmate routes to you' "$brief" >/dev/null \
