@@ -2,7 +2,7 @@
 name: show-me
 description: >-
   Use when a captain-facing answer needs structure before prose - an "I can't read this" complaint, a collection, measurement, or time-anchor defect to explain, a PR review with no CI backing it, or a set of options the captain has to pick between.
-  Applies the vendored upstream show-me judgement in skills/show-me/SKILL.md and replaces only its delivery surface, sending the view where the captain actually reads it.
+  Applies the vendored upstream show-me judgement in skills/show-me/SKILL.md and replaces only its delivery surface, writing the view as a self-contained HTML artifact under the main firstmate home.
   Manual-only: it stays out of every automatic round and is never wired into supervision.
 user-invocable: true
 metadata:
@@ -21,46 +21,21 @@ The judgement - which view answers which question, and whether a view earns its 
 That file is kept byte-for-byte identical to upstream and must never be edited locally.
 This file replaces **only** the delivery surface and binds the three view types to this fleet's work.
 
-## 1. Replace the delivery surface
+## 1. Delivery surface: an HTML artifact in the main home
 
-Upstream ends by telling the reader to write an HTML file and open it in a browser.
-The captain reads answers in WeChat, so that last step does not survive contact.
+Captain instruction (2026-10-06) replaced the earlier pixel-and-messaging surface.
+The view now ships as one HTML artifact written under the main firstmate home, and the chat reply points at it.
+No rasterising step, no image tool, and no messaging endpoint is required or attempted.
+The superseded surface sent pixels through a chat bridge, so a bridge fault could block a view; that dependency is gone.
 
-Rule: a visual the captain never received did not happen.
-Never substitute a filesystem path, a filename, or "I wrote it to X" for delivery; a path is at best a pointer nobody can open on a phone.
+Rule: the artifact is the delivery.
+Write it where this home keeps private artifacts, name it `show-me-<topic>-<YYYYMMDD>.html`, keep it self-contained - no external stylesheet, font, script, or network fetch - so it opens offline, and give the path in the chat reply next to a one-line statement of what it shows.
+A dense single-page view is the goal; a view that needs a server or a build step is not.
 
-Try these in order and stop at the first that actually lands.
+The artifact lands under this home's already-ignored `data/`, so it never dirties a checkout and never blocks a landing.
+When a newer artifact replaces an older one for the same topic, delete the older file instead of accumulating a series.
 
-| Rank | Surface | Use it for | Verified behaviour |
-|---|---|---|---|
-| 1 | Image sent into the conversation | One view readable at a glance: a sequence diagram, a call tree, a diff-shaped sketch | Tool `send_image_to_wechat`, parameter `imagePath`, accepts png/jpg/gif/webp, and only paths inside the session's project directory |
-| 2 | Minimal structured text in chat | Fallback when no image surface can deliver | Always available; shape below |
-
-Rank 2 is the honest fallback, not a lesser success: say which surface failed, then send the node list, the edge list, and the open questions in short lines, and state plainly that the picture itself did not reach the captain so he knows he is reading the reduced form.
-
-### Turning the upstream HTML artifact into pixels
-
-The upstream HTML artifact is still the right container for a dense view; it just has to become an image first.
-No renderer package may be installed for this; the cheap measured path reuses a browser already on the machine:
-
-```bash
-tmpdir=$(mktemp -d)
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-  --headless=new --disable-gpu --hide-scrollbars \
-  --window-size=<width>,<height> \
-  --screenshot="$tmpdir/out.png" "file://$tmpdir/show-me.html"
-# copy into an ignored project path only long enough to send it, then remove both
-cp "$tmpdir/out.png" scratchpad-show-me.png
-# ...send scratchpad-show-me.png, then:
-rm -f scratchpad-show-me.png && rm -rf "$tmpdir"
-```
-
-Two constraints come from the delivery tool, not the renderer: the artifact must be rasterised (`.html` is not an accepted image format) and it must sit inside the session's project directory to be sendable.
-
-Cleanup is part of the recipe, not an afterthought.
-Render working files in a `mktemp -d` directory, keep the sendable PNG on a path the repository already ignores (`scratchpad*`, or under `data/`), and delete both once sent.
-Never leave a rendered artifact where the landing checks would call the local copy dirty: untracked files count as dirt there, so a stray `out.png` at the project root blocks landing and invites a forced cleanup.
-A view that blocks the change it illustrates was not worth producing.
+Reduced form, used only when the captain has no way to open the file: say that plainly, then give the node list, the edge list, and the open questions in short lines.
 
 ## 2. Which view answers which judgement
 
@@ -71,7 +46,7 @@ These are the bindings worth spending a picture on in this fleet.
 |---|---|---|
 | A collection, measurement, or time-anchor defect ("the number is wrong", "the event is missing", "the mark landed out of order") | Sequence diagram over pseudocode | Was the write committed before it was read; primary or cache; did the event fire before or after the commit; was a version or revision compared at all |
 | Reviewing a PR with no CI backing it | Diff shape plus risk path, per the upstream `diff` bullet | New entry point, then the permission check, then the write, then any outbound message, then cache invalidation, then the failure branch |
-| A choice the captain has to make between options (a threshold, a setting, a variant) | Comparison view, delivered as rank 1's image or the rank 2 text table - never a long markdown wall | The options as columns, the consequence of each, and which option each row rules out |
+| A choice the captain has to make between options (a threshold, a setting, a variant) | Comparison view, delivered as the artifact's table with the deciding rows echoed in chat - never a long markdown wall | The options as columns, the consequence of each, and which option each row rules out |
 
 Static views miss dynamic behaviour and failure paths, which is where this fleet's defects have been living.
 So a view is navigation, not approval: label every node you did not personally verify as **to confirm**, and keep that label visible in the fallback text too.
@@ -130,7 +105,8 @@ Bounded by trust: project `.agents/skills/` directories are collected only for a
 
 Unverified; do not advertise until actually run:
 
-- End-to-end delivery of a rendered diagram into the captain's WeChat conversation. The tool contract and the renderer are measured; the round trip refused twice with the bridge not started, so rank 1 has never landed in a live conversation.
+- How the captain's own viewing surface renders a wide single-page artifact on a phone; the artifact is written and pointed at, and its readability there is unmeasured.
+- The superseded pixel surface is no longer part of the rule, so the earlier chat-bridge measurements are history rather than a current claim.
 - Any harness besides pi: claude, codex, opencode, grok, kimi, cursor, omp and the rest named in the supervisor contract were not exercised for this skill.
 - Whether the interactive decision board tool is present in a given session; it was unavailable in the sessions that produced these records, which is why it is not a ranked surface above.
 - Rendering quality at realistic diagram sizes, and whether an attached HTML file previews usefully on a phone.
