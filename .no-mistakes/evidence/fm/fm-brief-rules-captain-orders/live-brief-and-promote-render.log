@@ -1,0 +1,40 @@
+### LIVE DRIVE: bin/fm-brief.sh (scaffold) and bin/fm-promote.sh (promotion) in an isolated FM_HOME
+LAB=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-lab-brief.9B00Jb
+commit=95fea50844d4df0ebbc5b40ba68916f5a4eb005d
+
+===== scaffold brief: t-nomistakes =====
+26:1. Never push to the default branch. You may merge only your own task's PR, and only when one of these holds: (a) this task's instructions explicitly say you may merge; (b) the captain or firstmate gave you the word to merge in this conversation. If you cannot tell whether you are authorized to merge, do not guess and do not merge - append a needs-decision asking first. Once you are authorized to merge, these four steps are mandatory: (i) verify in a disposable copy that the branch merges into the latest default branch without conflicts; (ii) run the full test suite on the merged tree and confirm zero failures beyond the default-branch baseline; (iii) end-to-end test and recalculate the target feature on the merged tree; (iv) if step (iii) fails, revert to the state before the merge and report the failure.
+
+===== scaffold brief: t-directpr =====
+25:1. Never push to the default branch (push only your `fm/t-directpr` branch). You may merge only your own task's PR, and only when one of these holds: (a) this task's instructions explicitly say you may merge; (b) the captain or firstmate gave you the word to merge in this conversation. If you cannot tell whether you are authorized to merge, do not guess and do not merge - append a needs-decision asking first. Once you are authorized to merge, these four steps are mandatory: (i) verify in a disposable copy that the branch merges into the latest default branch without conflicts; (ii) run the full test suite on the merged tree and confirm zero failures beyond the default-branch baseline; (iii) end-to-end test and recalculate the target feature on the merged tree; (iv) if step (iii) fails, revert to the state before the merge and report the failure.
+
+===== scaffold brief: t-localonly =====
+25:1. Never push to any remote and never open a PR. Work only on your `fm/t-localonly` branch; firstmate handles the merge into local `main`.
+
+===== scaffold brief: t-gerrit =====
+25:1. Never push with git and never create a change except through the one `gerrit-axi publish --squash` your Definition of done names. Never run `gerrit-axi submit`, never vote or review a change by any path, including `gerrit review` or a label option on a push, and never abandon one: a human reviewer approves and submits it on the server.
+
+===== promoted scout ship-instructions.md: Rule 1 (fm-promote.sh) =====
+--- promo-no-mistakes ---
+1. Never push to the default branch. You may merge only your own task's PR, and only when one of these holds: (a) this task's instructions explicitly say you may merge; (b) the captain or firstmate gave you the word to merge in this conversation. If you cannot tell whether you are authorized to merge, do not guess and do not merge - append a needs-decision asking first. Once you are authorized to merge, these four steps are mandatory: (i) verify in a disposable copy that the branch merges into the latest default branch without conflicts; (ii) run the full test suite on the merged tree and confirm zero failures beyond the default-branch baseline; (iii) end-to-end test and recalculate the target feature on the merged tree; (iv) if step (iii) fails, revert to the state before the merge and report the failure.
+
+--- promo-direct-PR ---
+1. Never push to the default branch (push only your `fm/promo-direct-PR` branch). You may merge only your own task's PR, and only when one of these holds: (a) this task's instructions explicitly say you may merge; (b) the captain or firstmate gave you the word to merge in this conversation. If you cannot tell whether you are authorized to merge, do not guess and do not merge - append a needs-decision asking first. Once you are authorized to merge, these four steps are mandatory: (i) verify in a disposable copy that the branch merges into the latest default branch without conflicts; (ii) run the full test suite on the merged tree and confirm zero failures beyond the default-branch baseline; (iii) end-to-end test and recalculate the target feature on the merged tree; (iv) if step (iii) fails, revert to the state before the merge and report the failure.
+
+--- promo-local-only ---
+1. Never push to any remote and never open a PR. Work only on your `fm/promo-local-only` branch; firstmate handles the merge into local `main`.
+
+===== DoD authorization sentence (scaffold + promoted) =====
+/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-lab-brief.9B00Jb/data/t-nomistakes/brief.md:134:You may merge the PR only when this task's instructions say you may or the captain or firstmate gave you the word in this conversation; otherwise the configured merge authority decides and firstmate relays the outcome. When you are authorized to merge, follow Rule 1's complete post-merge verification and rollback requirements.
+/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-lab-brief.9B00Jb/data/t-directpr/brief.md:101:You may merge the PR only when this task's instructions say you may or the captain or firstmate gave you the word in this conversation; otherwise the configured merge authority decides and firstmate relays the outcome. When you are authorized to merge, follow Rule 1's complete post-merge verification and rollback requirements.
+/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-lab-brief.9B00Jb/data/promo-no-mistakes/ship-instructions.md:78:You may merge the PR only when this task's instructions say you may or the captain or firstmate gave you the word in this conversation; otherwise the configured merge authority decides and firstmate relays the outcome. When you are authorized to merge, follow Rule 1's complete post-merge verification and rollback requirements.
+/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-lab-brief.9B00Jb/data/promo-direct-PR/ship-instructions.md:43:You may merge the PR only when this task's instructions say you may or the captain or firstmate gave you the word in this conversation; otherwise the configured merge authority decides and firstmate relays the outcome. When you are authorized to merge, follow Rule 1's complete post-merge verification and rollback requirements.
+
+===== decision-context requirement (needs-decision) =====
+/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-lab-brief.9B00Jb/data/t-nomistakes/brief.md:55:   append `needs-decision [at=<epoch>]: {background and each option with its consequence}` and stop. Firstmate will reply with the decision.
+/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-lab-brief.9B00Jb/data/t-scout/brief.md:46:   append `needs-decision [at=<epoch>]: {background and each option with its consequence}` and stop. Firstmate will reply with the decision.
+secondmate charter:
+54:When escalating a decision, include its background and the consequence of each option.
+
+===== adversarial: stale literals must be absent from ALL generated scaffolds/instructions =====
+none found (PASS)
