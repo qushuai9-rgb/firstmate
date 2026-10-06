@@ -176,15 +176,19 @@ write_record() { # task record-json-file
 }
 
 forge() {
-  local remaining bounded=0 rc=0
+  local remaining rc=0
   remaining=$((DEADLINE - $(date +%s)))
   # The budget, not the forge, refused this read.
   [ "$remaining" -gt 0 ] || { BUDGET_EXHAUSTED=1; return 1; }
-  if [ "$remaining" -le 5 ]; then bounded=1; else remaining=5; fi
+  [ "$remaining" -le 5 ] || remaining=5
   fm_run_timed "$remaining" env GH_PROMPT_DISABLED=1 GH_NO_UPDATE_NOTIFIER=1 \
     gh "$@" 2> "$TMP/forge.err" || rc=$?
-  # A read killed at the budget's own deadline is budget exhaustion too.
-  [ "$rc" -ne 124 ] || [ "$bounded" -eq 0 ] || BUDGET_EXHAUSTED=1
+  # A kill at the read bound or at the deadline is budget refusal too; only the
+  # forge's own nonzero exit is unavailable evidence. This matches upstream main
+  # (bin/fm-contributions.sh), which this home predates; without it a slow but
+  # successful read that is killed at the five-second bound is reported as
+  # "observation unavailable" and re-wakes every poll.
+  [ "$rc" -ne 124 ] || BUDGET_EXHAUSTED=1
   return "$rc"
 }
 
