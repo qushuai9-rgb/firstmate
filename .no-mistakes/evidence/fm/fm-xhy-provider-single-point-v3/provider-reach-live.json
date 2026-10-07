@@ -1,0 +1,7 @@
+{
+  "command": "bin/fm-provider-reach-probe.sh --host 127.0.0.1:<ephemeral-port>/probe/path",
+  "exit": 0,
+  "stdout": "probe=host:127.0.0.1:54372 dns=skipped http=200 result=reachable dns_detail=dns_literal route=direct",
+  "stderr": "",
+  "response_body_leaked": false
+}
