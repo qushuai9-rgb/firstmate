@@ -1,0 +1,10 @@
+Real curl against local HTTPS endpoint and credential-bearing local proxy; DNS isolated with a local resolver executable.
+
+NO_PROXY=example.*; --host api.example.invalid:<port>
+exit=2
+probe=host:api.example.invalid:62046 dns=ok http=none result=invalid-input proxy URL carries credentials\nproxy_received_request=
+(none)
+
+NO_PROXY=*; --host 127.0.0.1:<port>
+exit=0
+probe=host:127.0.0.1:62046 dns=skipped http=200 result=reachable dns_detail=dns_literal route=direct
