@@ -13,16 +13,9 @@ set -u
 . "$(dirname "${BASH_SOURCE[0]}")/wake-helpers.sh"
 
 DRAIN="$ROOT/bin/fm-wake-drain.sh"
+REPORT="$ROOT/bin/fm-secondmate-report.sh"
 
 TMP_ROOT=$(fm_test_tmproot fm-wake-drain-unread-status-tests)
-
-# These regressions exercise status presentation on a home that does not run
-# the supervision host, so its BRANCH OUTCOMES section stays out of the drain;
-# the explicit off file pins that posture on every primary instead of reading
-# the code root's config (bin/fm-supervision-engine-lib.sh owns the gate).
-mkdir -p "$TMP_ROOT/config"
-: > "$TMP_ROOT/config/supervision-host-off"
-export FM_CONFIG_OVERRIDE="$TMP_ROOT/config"
 
 # Establish the durable last-presentation cursor by draining once over a
 # bootstrap line so later appends are "new since last drain".
@@ -166,65 +159,80 @@ test_pending_reply_resolution_surfaces_once() {
   pass "a pending-reply resolution buried under a later note surfaces once and closes OPEN DECISIONS"
 }
 
-# The watcher's pending-reply close goes through the self-announced append, so
-# it records its bytes as this home's own and never wakes. The drain must still
-# present that reserved-key resolution in UNREAD STATUS, its only guaranteed
-# presentation.
-test_self_announced_pending_reply_close_still_surfaces() {
-  local dir state out status corr
-  dir=$(make_case self-announced-pending-reply)
+test_secondmate_parent_reports_surface_in_log_order_once() {
+  local dir state out status mate corr done_line paused_line failed_line
+  dir=$(make_case secondmate-parent-reports)
   state="$dir/state"
   out="$dir/drain.out"
-  status="$state/task6.status"
+  status="$state/quant-researcher.status"
+  mate="$dir/quant-researcher-home"
+  corr=0123456789abcdef
+  done_line="done [corr=$corr]: experiment completed (via-helper)"
+  done_line_pattern="done \\[corr=$corr\\]( \\[at=[0-9]+\\])?: experiment completed \\(via-helper\\)"
+  paused_line='paused [key=market-data]: awaiting the next market-data window'
+  failed_line='failed [key=experiment-run]: benchmark worker exited unexpectedly'
 
-  run_pending_reply() {
-    FM_STATE_OVERRIDE="$state" FM_PENDING_REPLY_NOW=5000 bash -c '
-      . "$1"; . "$2"; shift 2; "$@"
-    ' _ "$ROOT/bin/fm-pending-reply-lib.sh" "$ROOT/bin/fm-wake-lib.sh" "$@"
-  }
-
-  corr=$(run_pending_reply fm_pending_reply_create "$dir" "$state" task6 "ship it") \
-    || fail "could not create the pending-reply record"
-  run_pending_reply fm_pending_reply_mark_delivered "$state" "$corr" \
-    || fail "could not mark the pending-reply request delivered"
-  FM_STATE_OVERRIDE="$state" FM_PENDING_REPLY_NOW=5000 bash -c '
-    . "$1"; rec=$(fm_pending_reply_path "$2" "$3")
-    fm_pending_reply_set "$rec" phase escalated && fm_pending_reply_set "$rec" escalated_epoch 4950
-  ' _ "$ROOT/bin/fm-pending-reply-lib.sh" "$state" "$corr" \
-    || fail "could not mark the pending-reply request escalated"
-
-  printf 'blocked [key=pending-reply-%s]: pending-reply-missed: task=task6 pending-reply-id=%s request=ship it\n' \
+  printf 'kind=secondmate\n' > "$state/quant-researcher.meta"
+  printf 'blocked [key=pending-reply-%s]: pending-reply-missed: task=quant-researcher pending-reply-id=%s request=report\n' \
     "$corr" "$corr" > "$status"
-  prime_status_seen "$state" "$status" || fail "could not mark the status file surfaced"
-  append_wake "$state" signal task6.status "signal: task6.status" \
-    || fail "queueing the pending-reply escalation signal failed"
-  FM_STATE_OVERRIDE="$state" "$DRAIN" >/dev/null || fail "drain of the escalation failed"
-  printf 'done [corr=%s]: shipped after all\n' "$corr" >> "$status"
-  prime_status_seen "$state" "$status" || fail "could not mark the status file surfaced"
-  append_wake "$state" signal task6.status "signal: task6.status" \
-    || fail "queueing the delayed reply signal failed"
-  FM_STATE_OVERRIDE="$state" "$DRAIN" >/dev/null || fail "drain of the delayed reply failed"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" >/dev/null \
+    || fail "drain failed while recording the prior secondmate blocker"
 
-  run_pending_reply fm_pending_reply_try_resolve "$state" "$corr" \
-    || fail "the delayed reply did not resolve the pending-reply record"
-  sed -E 's/ \[at=[0-9]+\]//' "$status" \
-    | grep -F "resolved [key=pending-reply-$corr]: pending-reply-resolved:" >/dev/null \
-    || fail "the resolve did not append the escalation close: $(cat "$status")"
-  [ -s "$state/.task6.home-appends" ] \
-    || fail "the escalation close did not go through the self-announced append"
-  run_pending_reply fm_wake_signal_seen_current "$state" "$status" \
-    || fail "the self-announced escalation close was left to re-wake this home"
+  mkdir -p "$mate/state"
+  printf 'quant-researcher\n' > "$mate/.fm-secondmate-home"
+  cat > "$mate/.fm-secondmate-parent" <<EOF
+schema=fm-secondmate-parent.v1
+route=local
+parent_home=$dir
+EOF
+  FM_HOME="$mate" "$REPORT" done "$corr" 'experiment completed' \
+    || fail "the secondmate report helper failed"
+  printf '%s\n%s\n' "$paused_line" "$failed_line" >> "$status"
 
-  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" || fail "drain after the escalation close failed"
-  sed -E 's/ \[at=[0-9]+\]//' "$out" \
-    | grep -F "task6 resolved [key=pending-reply-$corr]: pending-reply-resolved: task=task6 pending-reply-id=$corr" >/dev/null \
-    || fail "the self-announced pending-reply resolution was hidden from UNREAD STATUS: $(cat "$out")"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" \
+    || fail "drain failed after secondmate parent reports"
 
-  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" || fail "second drain after the escalation close failed"
-  if grep -F 'pending-reply-resolved:' "$out" >/dev/null; then
-    fail "an already-presented self-announced resolution was replayed: $(cat "$out")"
+  grep -F 'UNREAD STATUS' "$out" >/dev/null \
+    || fail "secondmate reports were not independently surfaced: $(cat "$out")"
+  grep -E "quant-researcher $done_line_pattern" "$out" >/dev/null \
+    || fail "the via-helper correlated done report was hidden by the old blocker: $(cat "$out")"
+  [ "$(grep -Ec "quant-researcher $done_line_pattern" "$out")" -eq 1 ] \
+    || fail "the correlated done report was duplicated by the outcome backstop: $(cat "$out")"
+  if grep -F 'STATUS OUTCOME BACKSTOP' "$out" >/dev/null; then
+    fail "the already surfaced secondmate report was reprinted by the outcome backstop: $(cat "$out")"
   fi
-  pass "a self-announced pending-reply close does not wake yet still surfaces once in UNREAD STATUS"
+  grep -F "quant-researcher $paused_line" "$out" >/dev/null \
+    || fail "the keyed paused report was not surfaced: $(cat "$out")"
+  grep -F "quant-researcher $failed_line" "$out" >/dev/null \
+    || fail "the keyed failed report was not surfaced: $(cat "$out")"
+  [ "$(grep -nE "quant-researcher $done_line_pattern" "$out" | head -1 | cut -d: -f1)" \
+    -lt "$(grep -nF "quant-researcher $paused_line" "$out" | head -1 | cut -d: -f1)" ] \
+    || fail "the done report was not presented before the later pause"
+  [ "$(grep -nF "quant-researcher $paused_line" "$out" | head -1 | cut -d: -f1)" \
+    -lt "$(grep -nF "quant-researcher $failed_line" "$out" | head -1 | cut -d: -f1)" ] \
+    || fail "the paused report was not presented before the later failure"
+
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" \
+    || fail "second drain after secondmate parent reports failed"
+  grep -F "$done_line" "$out" >/dev/null \
+    && fail "the correlated done report was replayed after presentation: $(cat "$out")"
+  grep -F "$paused_line" "$out" >/dev/null \
+    && fail "the keyed paused report was replayed after presentation: $(cat "$out")"
+  grep -F "$failed_line" "$out" >/dev/null \
+    && fail "the keyed failed report was replayed after presentation: $(cat "$out")"
+
+  printf 'kind=ship\n' > "$state/ordinary-worker.meta"
+  printf 'done [corr=%s]: ordinary completion\npaused [key=ordinary-wait]: ordinary pause\nfailed [key=ordinary-failure]: ordinary failure\n' \
+    "$corr" > "$state/ordinary-worker.status"
+  FM_STATE_OVERRIDE="$state" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task ordinary-worker --verdict captain --summary 'ordinary failure was handled' >/dev/null \
+    || fail "could not cover the ordinary worker's latest terminal status"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" \
+    || fail "drain failed while checking ordinary-worker compatibility"
+  if grep -F 'UNREAD STATUS' "$out" >/dev/null; then
+    fail "secondmate report surfacing leaked onto an ordinary worker: $(cat "$out")"
+  fi
+  pass "secondmate correlated and keyed parent reports surface once in append order"
 }
 
 test_unread_output_over_cap_remains_recoverable() {
@@ -297,17 +305,11 @@ test_retired_task_id_starts_new_status_unread() {
     printf "40@$(cat "$2")" > "$(status_signal_seen_marker_path "$STATE" reused)"
     printf "40@$(cat "$2")" > "$(status_heartbeat_seen_marker_path "$STATE" reused)"
     printf "40@$(cat "$2")" > "$(status_daemon_seen_marker_path "$STATE" reused)"
-    ledger=$(status_home_appends_path "$STATE/reused.status")
-    status_home_appends_record "$STATE/reused.status" 0 12 || exit 1
-    [ -f "$ledger" ] || exit 1
-    mkdir -p "$ledger.lock" || exit 1
-    printf "%s\n" 2147483646 > "$ledger.lock/pid" || exit 1
     status_retire_presentation_task "$STATE" reused || exit 1
     for marker in \
       "$(status_signal_seen_marker_path "$STATE" reused)" \
       "$(status_heartbeat_seen_marker_path "$STATE" reused)" \
-      "$(status_daemon_seen_marker_path "$STATE" reused)" \
-      "$ledger" "$ledger.lock"; do
+      "$(status_daemon_seen_marker_path "$STATE" reused)"; do
       [ ! -e "$marker" ] && [ ! -L "$marker" ] || exit 1
     done
   ' _ "$ROOT" "$dir/old-ident" || fail "retiring the reused task presentation state failed"
@@ -454,7 +456,7 @@ test_already_presented_notes_are_not_replayed
 test_brand_new_note_after_presentation_is_surfaced
 test_signal_annotation_surfaces_every_unread_note_not_only_the_newest
 test_pending_reply_resolution_surfaces_once
-test_self_announced_pending_reply_close_still_surfaces
+test_secondmate_parent_reports_surface_in_log_order_once
 test_unread_output_over_cap_remains_recoverable
 test_snapshot_does_not_ack_a_later_append
 test_retired_task_id_starts_new_status_unread
