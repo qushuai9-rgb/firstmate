@@ -368,9 +368,52 @@ _fm_classify_is_corr_token() {  # <word>
 # hot path can take the verb without forking a command substitution. Under bash's
 # dynamic scope an <out-var> named like one of this function's own locals (v, out,
 # word) would be assigned here and lost, so callers pass a distinct name.
+_fm_status_at_epoch() {  # <status-line> <out-var> -> 0 and the epoch when known
+  local __fm_at_head __fm_at_value __fm_at_rest
+  printf -v "$2" '%s' ''
+  case "$1" in *:*) __fm_at_head=${1%%:*} ;; *) return 1 ;; esac
+  case "$__fm_at_head" in *\[at=*\]*) ;; *) return 1 ;; esac
+  __fm_at_rest=${__fm_at_head#*\[at=}
+  __fm_at_value=${__fm_at_rest%%\]*}
+  case "${__fm_at_rest#*\]}" in *\[at=*) return 1 ;; esac
+  case "$__fm_at_value" in ''|*[!0-9]*|0[0-9]*) return 1 ;; esac
+  [ "${#__fm_at_value}" -le 12 ] || return 1
+  printf -v "$2" '%s' "$__fm_at_value"
+}
+
+_fm_status_untimed() {  # <status-line> <out-var> -> line without a time tag
+  local __fm_untimed_epoch __fm_untimed_head __fm_untimed_tag __fm_untimed_before
+  if _fm_status_at_epoch "$1" __fm_untimed_epoch; then
+    __fm_untimed_head=${1%%:*}
+    __fm_untimed_tag="[at=$__fm_untimed_epoch]"
+    __fm_untimed_before=${__fm_untimed_head%%"$__fm_untimed_tag"*}
+    printf -v "$2" '%s%s:%s' "${__fm_untimed_before% }" \
+      "${__fm_untimed_head#*"$__fm_untimed_tag"}" "${1#*:}"
+    return 0
+  fi
+  printf -v "$2" '%s' "$1"
+}
+
+status_event_recorded() {  # <status-file> <new-status-line>
+  local wanted line untimed
+  [ -f "$1" ] || return 1
+  _fm_status_untimed "$2" wanted
+  while IFS= read -r line || [ -n "$line" ]; do
+    _fm_status_untimed "$line" untimed
+    [ "$untimed" != "$wanted" ] || return 0
+  done < "$1"
+  return 1
+}
+
 # Stamp only a newly emitted event. Preserve an existing tag, even malformed,
 # and preserve the event itself if the clock cannot be read. Never use this to
 # timestamp a copied historical line.
+status_line_at_epoch() {
+  local epoch
+  _fm_status_at_epoch "$1" epoch || return 1
+  printf '%s' "$epoch"
+}
+
 status_stamp_line() {  # <new-status-line> -> line (without newline)
   local head epoch
   case "$1" in
@@ -714,6 +757,16 @@ _fm_decision_fold_line() {  # <open-set> <status-line> <resolve-verb> <held-verb
 # before any read - a cheap builtin, unlike fm_wake_latest_event's O_NOFOLLOW
 # subprocess read, which exists for that function's much narrower payload-driven
 # path resolution rather than this directory-local glob.
+status_own_open_decisions() {  # <status-file>
+  local line prefix
+  status_open_decisions "$1" | while IFS= read -r line || [ -n "$line" ]; do
+    for prefix in ${FM_CLASSIFY_RESERVED_KEY_PREFIXES:-$FM_CLASSIFY_RESERVED_KEY_PREFIXES_DEFAULT} remote-reply-continuity- captain-hold-; do
+      case "$line" in "$prefix"*) continue 2 ;; esac
+    done
+    printf '%s\n' "$line"
+  done
+}
+
 status_open_decisions() {  # <status-file> [<kind>]
   local f=$1 kind=${2:-} line resolve held open='' verb
   [ -f "$f" ] && [ -r "$f" ] && [ ! -L "$f" ] || return 0

@@ -187,6 +187,31 @@ The 38-file inventory is not cleared for landing by this table; main disposition
 
 The approved per-file stop condition is active for `bin/fm-pending-reply-lib.sh`: its local delta is 146 inserted lines, above the 50-line limit, and upstream semantics changed in the same area. No further behavior ports were attempted after identifying this scope boundary.
 
+## Compatibility symbols and pending-reply verification
+
+The upstream compatibility set now includes five added symbols in the preserved local classifier:
+
+| Symbol | Upstream source | Consumer | Evidence |
+|---|---|---|---|
+| `status_stamp_line` | `origin/main:bin/fm-classify-lib.sh:471-484` | Upstream status writers including `fm-secondmate-report.sh` | Added earlier; `fm-wake-drain-unread-status` passes. |
+| `_fm_status_untimed` | `origin/main:bin/fm-classify-lib.sh:510-524` | `status_event_recorded` | Added verbatim with its epoch parser dependency. |
+| `status_event_recorded` | `origin/main:bin/fm-classify-lib.sh:559-570` | `bin/fm-pending-reply-lib.sh` escalation dedup | Added verbatim; required to avoid duplicate status escalation. |
+| `status_own_open_decisions` | `origin/main:bin/fm-classify-lib.sh:940-948` | `fm_pending_reply_send_recovery` honors `config/wait-no-turns` | Added verbatim so recovery waits while the mate has an open decision. |
+| `_fm_status_at_epoch` | `origin/main:bin/fm-classify-lib.sh:449-461` | `_fm_status_untimed` | Added verbatim as parser dependency. |
+
+All five additions are within the authorized limit; none changes the existing local classifier functions.
+No upstream symbols were missing from the preserved `bin/fm-wake-lib.sh` dependency surface in the scan performed for this change.
+
+| Command | Result |
+|---|---:|
+| `bash tests/fm-pending-reply.test.sh` | 1/1 passed (48 assertions; final output `all pending-reply tests passed`) |
+| `bash tests/fm-classify-corr-token.test.sh` | 1/1 passed |
+| `bash tests/fm-classify-decision-key.test.sh` | 1/1 passed |
+| `bash tests/fm-wake-queue.test.sh` | 1/1 passed |
+| `bash tests/fm-busy-state.test.sh` | 1/1 passed |
+
+The pending-reply test is the local-main version (48 named cases) and exercises the symlink refusals and expiry behavior. The upstream pending-reply implementation already owned expiry/archive and temporary-residue cleanup; those portions were not replaced. Per-record and root symlink guards are in commit `afb08ba0`.
+
 ## Still unverified
 
 No complete repository-wide test suite has been run on this route-B branch.
