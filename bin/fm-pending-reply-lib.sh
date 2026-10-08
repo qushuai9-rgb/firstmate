@@ -171,6 +171,10 @@ fm_pending_reply_path() {  # <state-dir> <corr_id>
   printf '%s/%s' "$(fm_pending_reply_dir "$1")" "$2"
 }
 
+fm_pending_reply_record_is_safe() {  # <record-path>
+  [ -f "$1" ] && [ ! -L "$1" ]
+}
+
 # Privacy-safe correlation id: 16 lowercase hex chars (64 bits of entropy).
 fm_pending_reply_new_id() {
   local raw hex
@@ -218,7 +222,7 @@ fm_pending_reply_summarize() {  # <text>
 
 fm_pending_reply_get() {  # <record-path> <key>
   local rec=$1 key=$2
-  [ -f "$rec" ] || return 0
+  fm_pending_reply_record_is_safe "$rec" || return 0
   grep "^${key}=" "$rec" 2>/dev/null | tail -1 | cut -d= -f2- || true
 }
 
@@ -253,7 +257,7 @@ fm_pending_reply_corr_reusable() {  # <state-dir> <corr_id> <task_id>
   local state=$1 corr=$2 task_id=$3 rec phase delivered
   printf '%s' "$corr" | grep -Eq '^[A-Fa-f0-9]{16}$' || return 1
   rec=$(fm_pending_reply_path "$state" "$corr")
-  [ -f "$rec" ] || return 1
+  fm_pending_reply_record_is_safe "$rec" || return 1
   [ "$(fm_pending_reply_get "$rec" task_id)" = "$task_id" ] || return 1
   phase=$(fm_pending_reply_get "$rec" phase)
   case "$phase" in
@@ -272,7 +276,7 @@ fm_pending_reply_corr_reusable() {  # <state-dir> <corr_id> <task_id>
 # Rewrite one key in a pending-reply record atomically. Other keys preserved.
 fm_pending_reply_set() {  # <record-path> <key> <value>
   local rec=$1 key=$2 value=$3 dir base tmp line
-  [ -f "$rec" ] || return 1
+  fm_pending_reply_record_is_safe "$rec" || return 1
   dir=$(dirname "$rec")
   base=$(basename "$rec")
   tmp="$dir/.${base}.tmp.$$"
@@ -379,7 +383,7 @@ EOF
 fm_pending_reply_mark_delivered() {  # <state-dir> <corr_id> [confirmed-epoch]
   local state=$1 corr=$2 confirmed_epoch=${3-} rec phase delivered now
   rec=$(fm_pending_reply_path "$state" "$corr")
-  [ -f "$rec" ] || return 1
+  fm_pending_reply_record_is_safe "$rec" || return 1
   phase=$(fm_pending_reply_get "$rec" phase)
   case "$phase" in
     awaiting_report|delivery_unknown|recovery_sending|recovery_sent|escalated|resolved) ;;
@@ -1550,9 +1554,9 @@ fm_pending_reply_tick() {  # <state-dir>
   local observation observation_task found i
   local -a observation_tasks=() observation_values=() records=() selected=()
   dir=$(fm_pending_reply_dir "$state")
-  [ -d "$dir" ] || return 0
+  { [ -d "$dir" ] && [ ! -L "$dir" ]; } || return 0
   for rec in "$dir"/*; do
-    [ -f "$rec" ] || continue
+    fm_pending_reply_record_is_safe "$rec" || continue
     case "${rec##*/}" in
       .*) continue ;;
     esac
@@ -1673,9 +1677,9 @@ fm_pending_reply_tick() {  # <state-dir>
 fm_pending_reply_task_has_open() {  # <state-dir> <task_id>
   local state=$1 task_id=$2 dir rec phase tid
   dir=$(fm_pending_reply_dir "$state")
-  [ -d "$dir" ] || return 1
+  { [ -d "$dir" ] && [ ! -L "$dir" ]; } || return 1
   for rec in "$dir"/*; do
-    [ -f "$rec" ] || continue
+    fm_pending_reply_record_is_safe "$rec" || continue
     tid=$(fm_pending_reply_get "$rec" task_id)
     [ "$tid" = "$task_id" ] || continue
     phase=$(fm_pending_reply_get "$rec" phase)
