@@ -115,6 +115,12 @@ fm_path_age() {
 # derives the same default fm-watch.sh itself would use.
 # docs/turnend-guard.md "Guard grace and the poll cadence" is the single owner
 # of the rationale; every FM_GUARD_GRACE default should derive from this.
+fm_watcher_stall_bound() {
+  local poll=${1:-${FM_POLL:-15}} grace
+  grace=${FM_WATCHER_STALE_GRACE:-${FM_GUARD_GRACE:-$(fm_poll_derived_grace "$poll")}}
+  printf '%s\n' "${FM_WATCHER_STALL_BOUND:-$((grace * 3))}"
+}
+
 fm_poll_derived_grace() {
   local poll=${1:-${FM_POLL:-15}} margin=60 derived
   case "$poll" in ''|*[!0-9]*) poll=15 ;; esac
@@ -1816,6 +1822,14 @@ fm_wake_append() {
 # with the append (holding this lock excludes the drain's acknowledgement, which
 # deletes consumed rows under the same lock) acquire the lock once, run this and
 # their own write, then release.
+fm_wake_rows_queued() {  # <seq>...
+  [ -f "$FM_WAKE_QUEUE" ] || return 0
+  awk -F '\t' -v seqs="$*" '
+    BEGIN { n = split(seqs, list, " "); for (i = 1; i <= n; i++) want[list[i]] = 1 }
+    NF >= 5 && $2 ~ /^[0-9]+$/ && ($2 in want) { print $2 }
+  ' "$FM_WAKE_QUEUE"
+}
+
 fm_wake_append_locked() {
   local kind=$1 key=$2 payload=$3 clean_key clean_payload epoch seq seq_file status
   local recovery_marker
@@ -2419,3 +2433,104 @@ EOF
 
   return 0
 }
+
+
+# Upstream compatibility shims for callers retained on this Route B branch.
+fm_recovery_marker_handover_snapshot() {  # <marker>
+  local marker=$1 lock
+  FM_RECOVERY_HANDOVER_TOKEN=
+  FM_RECOVERY_HANDOVER_SEQ=
+  lock="${marker}.lock"
+  fm_lock_acquire_wait "$FM_WAKE_QUEUE_LOCK" || return 1
+  if ! fm_lock_acquire_wait "$lock"; then
+    fm_lock_release "$FM_WAKE_QUEUE_LOCK"
+    return 1
+  fi
+  if fm_recovery_marker_read "$marker"; then
+    # shellcheck disable=SC2034 # Read by callers after this function returns.
+    FM_RECOVERY_HANDOVER_TOKEN=$FM_RECOVERY_MARKER_TOKEN
+  fi
+  # shellcheck disable=SC2034 # Read by callers after this function returns.
+  FM_RECOVERY_HANDOVER_SEQ=$(cat "$STATE/.wake-queue.seq" 2>/dev/null || true)
+  fm_lock_release "$lock"
+  fm_lock_release "$FM_WAKE_QUEUE_LOCK"
+}
+
+fm_recovery_marker_handover_restore() {  # <marker> <snapshot-token> <snapshot-seq>
+  fm_recovery_transition "$1" handover-restore "$2" "$3"
+}
+
+fm_local_firstmate_state_dirs() {  # <first-state>
+  local first=$1 root home reg line child known existing i=0
+  local -a homes
+  FM_LOCAL_FIRSTMATE_STATES=("$first")
+  FM_LOCAL_FIRSTMATE_ERROR=
+  root=$(fm_firstmate_root_home "$FM_HOME") || {
+    FM_LOCAL_FIRSTMATE_ERROR="cannot resolve the root Firstmate home"
+    return 1
+  }
+  homes=("$root")
+  while [ "$i" -lt "${#homes[@]}" ]; do
+    home=${homes[$i]}
+    i=$((i + 1))
+    known=0
+    for existing in "${FM_LOCAL_FIRSTMATE_STATES[@]}"; do
+      if [ "$existing" = "$home/state" ] || [ "$existing" -ef "$home/state" ]; then
+        known=1
+      fi
+    done
+    [ "$known" = 1 ] || FM_LOCAL_FIRSTMATE_STATES+=("$home/state")
+    reg="$home/data/secondmates.md"
+    [ ! -e "$reg" ] && [ ! -L "$reg" ] && continue
+    [ -f "$reg" ] && [ ! -L "$reg" ] || {
+      FM_LOCAL_FIRSTMATE_ERROR="local Firstmate registry is unsafe at $reg"
+      return 1
+    }
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in
+        "- "*)
+          secondmate_registry_parse_line "$line" || {
+            FM_LOCAL_FIRSTMATE_ERROR="malformed local Firstmate registry entry in $reg"
+            return 1
+          }
+          [ "$SECONDMATE_REGISTRY_REMOTE" -eq 0 ] || continue
+          child=$([ -d "$SECONDMATE_REGISTRY_HOME" ] &&
+            CDPATH='' cd -- "$SECONDMATE_REGISTRY_HOME" 2>/dev/null && pwd -P) || {
+            FM_LOCAL_FIRSTMATE_ERROR="registered local Firstmate home is unavailable: $SECONDMATE_REGISTRY_HOME"
+            return 1
+          }
+          known=0
+          for existing in "${homes[@]}"; do
+            [ "$existing" != "$child" ] || known=1
+          done
+          [ "$known" = 1 ] || homes+=("$child")
+          ;;
+      esac
+    done < "$reg"
+  done
+}
+
+fm_wake_queue_prune_task() {  # <state> <task-id> [target]
+  local state=$1 task=$2 target=${3:-}
+  local queue="$state/.wake-queue" lock="$state/.wake-queue.lock" tmp
+  [ -f "$queue" ] || return 0
+  [ -s "$queue" ] || return 0
+  fm_lock_acquire_wait "$lock" || return 1
+  tmp=$(mktemp "$state/.wake-queue.prune.XXXXXX") || { fm_lock_release "$lock"; return 1; }
+  chmod 0600 "$tmp" 2>/dev/null || true
+  awk -F '\t' -v task="$task" -v target="$target" -v state="$state" '
+    NF >= 5 {
+      if ($3 == "stale" && target != "" && $4 == target) next
+      if ($3 == "signal" && ($4 == task || $4 == task ".status" || $4 == task ".turn-ended" || $4 == state "/" task ".status" || $4 == state "/" task ".turn-ended")) next
+      if ($3 == "check" && $4 == state "/" task ".check.sh") next
+    }
+    { print }
+  ' "$queue" > "$tmp" || { rm -f "$tmp"; fm_lock_release "$lock"; return 1; }
+  if ! _fm_atomic_replace "$tmp" "$queue"; then
+    rm -f "$tmp"
+    fm_lock_release "$lock"
+    return 1
+  fi
+  fm_lock_release "$lock"
+}
+

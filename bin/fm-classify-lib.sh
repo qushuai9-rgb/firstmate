@@ -2357,3 +2357,56 @@ stale_is_terminal() {  # <window> <state>
   last=$(last_status_line "$state/$(window_to_task "$win" "$state").status")
   [ -n "$last" ] && status_is_captain_relevant "$last"
 }
+
+
+# Upstream compatibility shims for callers retained on this Route B branch.
+status_declared_wait_line() {  # <status-file>
+  local f=$1 last verb resolve legacy_re
+  last=$(last_status_line "$f")
+  if status_is_paused_or_captain_held "$last"; then
+    printf '%s\n' "$last"
+    return 0
+  fi
+  resolve=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}
+  status_line_verb "$last" verb
+  [ "$verb" = "$resolve" ] || return 0
+  legacy_re="^[[:space:]]*(${FM_CAPTAIN_RE:-$FM_CLASSIFY_CAPTAIN_RE_DEFAULT})"
+  tail -n "$FM_CLASSIFY_EVENT_WINDOW_LINES" "$f" 2>/dev/null \
+    | _fm_status_declared_wait_scan "$resolve" "$legacy_re" \
+    || _fm_status_declared_wait_scan "$resolve" "$legacy_re" < "$f" || :
+}
+
+status_stamp_width() {  # -> characters a stamp adds to a line
+  local epoch tag
+  epoch=$(date +%s) || { printf 0; return 0; }
+  case "$epoch" in ''|*[!0-9]*) printf 0; return 0 ;; esac
+  tag=" [at=$epoch]"
+  printf '%s' "${#tag}"
+}
+
+status_has_open_needs_decision() {  # <status-file> [<run-id>]
+  local run=${2-} open line key verb
+  open=$(status_open_decisions "$1")
+  [ -n "$open" ] || return 1
+  if [ $# -ge 2 ] && [ -z "$run" ]; then return 1; fi
+  while IFS= read -r line; do
+    key=${line%%$'\t'*}
+    verb=${line#*$'\t'}; verb=${verb%%$'\t'*}
+    [ "$verb" = needs-decision ] || continue
+    [ $# -ge 2 ] || return 0
+    case "$key" in "nm-$run-"?*) return 0 ;; esac
+  done <<EOF
+$open
+EOF
+  return 1
+}
+
+status_scan_parent_channel_exclude() {  # <state>
+  local state=$1 exclude
+  if ! command -v fm_parent_channel_outbound_status >/dev/null 2>&1; then
+    # shellcheck source=bin/fm-parent-channel-lib.sh
+    . "$_FM_CLASSIFY_LIB_DIR/fm-parent-channel-lib.sh"
+  fi
+  exclude=$(fm_parent_channel_outbound_status "$(dirname "$state")" "$state") || return 0
+  printf '%s\n' "$exclude"
+}
