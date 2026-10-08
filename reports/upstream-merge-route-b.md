@@ -1,71 +1,50 @@
-# Route B watcher-family preservation evidence
 
-## Branch and base
 
-Delivery branch: `fm/upstream-route-b`.
-Base commit: `origin/main` at `b062eb94c50a68dd4467fba25346a7d7b4083288`.
-`origin/main..HEAD` currently counts 0 commits before this delivery commit; local main remains `56326e0d52ecdc49b6cc6700e776fdcfcfe94b2e` and was not moved.
-Upstream commit count from previous local baseline: `git rev-list --count 56326e0d..origin/main` was 219 at initial reconciliation; origin has since advanced, so current base is the explicit SHA above.
+## Local-only asset reconciliation (2026-10-08 follow-up)
 
-## Preserved local watcher family
+Compared both directions with `git diff --name-status main fm/upstream-route-b` and `git diff --name-status fm/upstream-route-b main`, then enumerated tree membership with `git ls-tree -r`.
+The local-only assets were all restored from `main` using `git checkout main -- <path>`:
 
-The following four files are restored exactly from local `main` (`56326e0d`) using `git checkout main -- <paths>`:
+| Class | Paths | Decision |
+|---|---|---|
+| Captain-requested show-me capability | `.agents/skills/show-me/FIRSTMATE.md`, `.agents/skills/show-me/SKILL.md`, `skills/show-me/SKILL.md`, `skills/show-me/UPSTREAM.md`, `skills/show-me/upstream-LICENSE.txt` | Restored; required local-only capability. |
+| Watchdog implementation/test | `.pi/extensions/fm-secondmate-bash-watchdog.ts`, `tests/fm-secondmate-bash-watchdog.test.sh` | Restored; local-only safety mechanism and regression. |
+| Local investigation evidence | `data/fm-secondmate-runtime-state-hardening/triage.md`, `docs/secondmate-runtime-state-reconcile.md` | Restored; local durable investigation record and technical note. |
+| Local watcher family | Four files listed above | Retained as local implementation. |
+| Upstream-only additions | 55 tree paths in `git ls-tree -r origin/main` absent from `main`, including supervision host, Devin, fleet ledger, and new tests | Kept from upstream base. |
+| Local-only files not retained | None of the nine tree paths unique to local main remain omitted. | Complete. |
+
+For status details, `git diff --name-status main fm/upstream-route-b` shows local-only restored paths as `A` from the branch perspective; reverse direction confirms upstream-only additions. The watcher-family file diffs against local main were empty before adding `status_stamp_line`; classifier now differs by that one upstream compatibility function, while the other three remain byte-identical.
+
+## `fm-watch-triage` follow-up diagnosis
+
+First failure was a stale test helper: `tests/fm-watch-triage.test.sh:5430-5432` invoked retired `fm-afk-contract.sh propose` and `confirm`. The implementation now owns direct `enter` (`bin/fm-afk-contract.sh`, usage header near lines 87-98); the helper was updated to call `enter`. This preserves the test intent: establish an away record before asserting captain-held waits are not rechecked, without the retired two-step handshake.
+
+A subsequent complete invocation passed the earlier away-record case but failed later at:
 
 ```text
-git diff --quiet main fm/upstream-route-b -- bin/fm-watch.sh; echo rc=0
-git diff --quiet main fm/upstream-route-b -- bin/fm-classify-lib.sh; echo rc=0
-git diff --quiet main fm/upstream-route-b -- bin/fm-wake-lib.sh; echo rc=0
-git diff --quiet main fm/upstream-route-b -- bin/fm-wake-drain.sh; echo rc=0
+not ok - [held-delivery] could not build a captain-held backlog fixture
 ```
 
-The verified `git diff --cached --quiet main -- <all four paths>` returned `rc=0` for each, proving the files staged at that point were byte-identical to local main.
-One additive compatibility function was subsequently added to `bin/fm-classify-lib.sh` from upstream to support upstream callers; therefore its current diff from local main is intentionally non-empty and contains only this addition.
+The failure occurs in `make_hold_home` (`tests/fm-watch-triage.test.sh:2792+`), which requires `tasks-axi add` and `fm-captain-hold.sh` to create a fixture. The command output establishes only that this fixture could not be built; the underlying tool or environment cause was not captured, so I cannot attribute it more specifically. The test file's `make_case` uses the system temporary directory, not a protected path.
+Therefore triage is not 1/1 passing; the exact remaining blocker is fixture construction, after the stale AFK helper was corrected.
 
-## Additive compatibility symbol
+The previous complete output excerpt is preserved in the session log but not repeated in this report; the latest invocation output ends with the named failure above.
 
-| Symbol | Upstream source | Consumer | Change |
-|---|---|---|---|
-| `status_stamp_line` | `origin/main:bin/fm-classify-lib.sh:471-484` | `bin/fm-secondmate-report.sh:105`, `bin/fm-parent-channel-lib.sh:174`, and other upstream status writers | Added verbatim to the local classifier so upstream report helpers can stamp emitted status lines. |
+## Additional test results after asset restoration
 
-No existing local function body or signature was changed for this compatibility addition.
-The related test needed to accept the timestamp that the upstream helper now emits; its assertion was adjusted to match the documented output format while retaining the correlated done content and once-only ordering checks.
+- `bash tests/fm-secondmate-bash-watchdog.test.sh`: 1/1 passed.
+- `bash tests/fm-wake-drain-unread-status.test.sh`: 1/1 passed after adding timestamp tolerance for upstream `status_stamp_line` output; correlated done content, order, and once-only checks remain.
+- `bash tests/fm-wake-drain-open-decisions.test.sh`: 1/1 passed.
+- `bash tests/fm-wake-queue.test.sh`: 1/1 passed.
+- `bash tests/fm-classify-decision-key.test.sh`: 1/1 passed.
+- `bash tests/fm-classify-corr-token.test.sh`: 1/1 passed.
+- `bash tests/fm-watch-triage.test.sh`: incomplete/failing at the tasks-axi backlog fixture as detailed above.
 
-## Focused test evidence
+## Still unverified
 
-| Command | Result |
-|---|---:|
-| `bash tests/fm-wake-drain-unread-status.test.sh` | 1/1 passed after the additive symbol and timestamp-aware assertion |
-| `bash tests/fm-wake-drain-open-decisions.test.sh` | 1/1 passed |
-| `bash tests/fm-wake-queue.test.sh` | 1/1 passed |
-| `bash tests/fm-classify-decision-key.test.sh` | 1/1 passed |
-| `bash tests/fm-classify-corr-token.test.sh` | 1/1 passed |
-| `bash tests/fm-watch-triage.test.sh` | 0/1 passed; local test expects legacy parked status handling and later hit a filesystem permission failure while writing its away-posture fixture. It is not a clean verification. |
-
-The focused regression suite `fm-wake-drain-unread-status` originally failed because the upstream `bin/fm-secondmate-report.sh` invoked `status_stamp_line`, absent from local classifier; adding the upstream implementation resolved the missing symbol and made this suite pass.
-
-## Five local mechanisms
-
-| Mechanism | Code present | Corresponding evidence |
-|---|---|---|
-| `secondmate_output_written_since` | Present in local classifier | Its assertion passed in the `fm-watch-triage` run before a later failure. |
-| Provider-error episode detection | Present in local watcher | Provider-error assertions passed in the same triage run. |
-| Idle-lapse self-continuation detection | Present in local watcher | Idle-lapse assertions passed in the same triage run. |
-| Turn-hang dual zero-growth detection | Present in local watcher | Local triage contains these checks, but no complete successful triage run was obtained. |
-| Invalid-queue detection | Present in local watcher | `fm-wake-queue` passed and includes invalid-queue diagnostics. |
-
-## Conflict approach
-
-All original merge conflict files other than the watcher-family paths remain upstream versions by using `origin/main` as the branch base.
-The local-only show-me skill files and watchdog test are absent from this route-B base; they were not copied because this route is specifically the upstream baseline plus the local watcher family and additive compatibility needed to run its upstream report helper.
-
-## Syntax and remaining verification
-
-A direct `bash -n bin/fm-watch.sh` attempt was denied by the command safety layer because `fm-watch.sh` is recognized as a protected watcher command; no watcher was started, stopped, or armed.
-No full test suite was run for this route-B branch.
-`fm-watch-triage` remains unverified due the legacy assertion mismatch and subsequent fixture permission failure.
-No production meta, project clone, local main, or remote was modified.
-
-## Rollback
-
-The prior local main commit is `56326e0d52ecdc49b6cc6700e776fdcfcfe94b2e`.
-For the captain-approved local landing path, the recovery target is to restore local main to that exact commit if the landing mechanism reports an anomaly; do not use reset/force or alter main outside its guarded landing workflow.
+No complete repository-wide test suite has been run on this route-B branch.
+The watcher triage suite is blocked at the compatible tasks-axi backlog fixture, so its later cases remain unverified.
+The current watcher syntax check was denied by the protected-command safety layer when attempting `bash -n bin/fm-watch.sh`; no watcher lifecycle action was taken.
+The upstream base has since moved from the original `e06a46fe` to `b062eb94`; the branch is based exactly on `b062eb94` and includes the additional local-only asset restoration in later commits.
+Rollback target remains local main `56326e0d52ecdc49b6cc6700e776fdcfcfe94b2e`.
