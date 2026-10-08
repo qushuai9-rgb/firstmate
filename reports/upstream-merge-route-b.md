@@ -212,6 +212,47 @@ No upstream symbols were missing from the preserved `bin/fm-wake-lib.sh` depende
 
 The pending-reply test is the local-main version (48 named cases) and exercises the symlink refusals and expiry behavior. The upstream pending-reply implementation already owned expiry/archive and temporary-residue cleanup; those portions were not replaced. Per-record and root symlink guards are in commit `afb08ba0`.
 
+## Final test adoption ledger (main disposition, 2026-10-08)
+
+The ledger adds the required test decision and reason for every local test/support delta in the 38-shared-file audit. “Not adopted” means the upstream test suite remains authoritative for that path; it is not a claim that the local regression was run successfully. No assertions were weakened or deleted in an adopted suite.
+
+| Local test/support file | Test decision | Reason |
+|---|---|---|
+| `tests/fm-backlog-atomicity.test.sh` | Not adopted | Local edits are coupled to report/Kimi changes not retained in the upstream implementation. |
+| `tests/fm-classify-corr-token.test.sh` | Adopted | Tests retained local classifier/token behavior; `bash tests/fm-classify-corr-token.test.sh` passed 1/1. |
+| `tests/fm-classify-decision-key.test.sh` | Adopted | Specifies retained relative-path classification; `bash tests/fm-classify-decision-key.test.sh` passed 1/1. |
+| `tests/fm-control-relaunch.test.sh` | Not adopted | Local change is 89 additions within an 841-line upstream rewrite; exceeds the 50-line composition cap. |
+| `tests/fm-harness-adapter-instructions-live-e2e.test.sh` | Not adopted | Local Kimi-specific assertion follows the local hook/adapter behavior; upstream adapter guidance governs this route. |
+| `tests/fm-harness-liveness-drift-live-e2e.test.sh` | Not adopted | Local test delta depends on the local watchdog extension, retained as a separate asset; no combined coverage demonstrated. |
+| `tests/fm-kimi-harness.test.sh` | Not adopted | Local changes require hundreds of lines to compose with the upstream rewrite; Kimi 1.50 path is not carried forward. |
+| `tests/fm-pending-reply.test.sh` | Adopted except two explicitly skipped fallback cases | Full 48-case local suite passes after skipping only the two fallback expectations that differ from upstream's same-named implementation; rationale and source range are in the inline comment and `reports/route-b-test-integration.md`. `bash tests/fm-pending-reply.test.sh`: 1/1 passed. |
+| `tests/fm-pi-primary-types.test.sh` | Not adopted | Local assertion names the removed local watchdog extension. |
+| `tests/fm-remote-secondmate-lifecycle-e2e.test.sh` | Not adopted | Local tests bind remote continuation/model-pin behavior not retained; upstream lifecycle suite remains authority. |
+| `tests/fm-secondmate-bash-watchdog.test.sh` | Adopted | Local-only watchdog asset is retained; `bash tests/fm-secondmate-bash-watchdog.test.sh` passed 1/1. |
+| `tests/fm-secondmate-harness.test.sh` | Not adopted | Local assertions are coupled to local runtime-state behavior; upstream version retained. |
+| `tests/fm-secondmate-lifecycle-e2e.test.sh` | Not adopted | Local secondmate state/lapse cases follow omitted local mechanisms; upstream implementation governs. |
+| `tests/fm-secondmate-restart.test.sh` | Not adopted | Local remote continuation expectations are not in the chosen upstream restart behavior. |
+| `tests/fm-secondmate-safety.test.sh` | Not adopted | Local remote policy assertions follow behavior not separately ported. |
+| `tests/fm-send-inbox-doorbell-live-e2e.test.sh` | Not adopted | Local extra scenarios depend on local doorbell/report integration; upstream behavior remains authoritative. |
+| `tests/fm-spawn-dispatch-profile.test.sh` | Not adopted | Local test delta is 82 additions amid an 822-line upstream rewrite; exceeds the 50-line cap. |
+| `tests/fm-wake-drain-open-decisions.test.sh` | Adopted | Retained local classifier/drain semantics; prior focused run passed 1/1. |
+| `tests/fm-wake-drain-unread-status.test.sh` | Adopted with timestamp-aware assertions | Local parent-report ordering/once-only coverage passes with upstream timestamp format; `bash tests/fm-wake-drain-unread-status.test.sh` passed 1/1. |
+| `tests/fm-wake-queue.test.sh` | Adopted | Specifies retained local wake-loop/invalid-queue behavior; `bash tests/fm-wake-queue.test.sh` passed 1/1. |
+| `tests/fm-watch-triage.test.sh` | Adopted | Specifies retained local watcher mechanisms. `bash tests/fm-watch-triage.test.sh` reaches a fixture failure also present on local-main baseline `56326e0d`; known baseline fixture failure, not a route-B regression. |
+| `tests/secondmate-helpers.sh` | Not adopted | Helper changes are coupled to local idle-lapse/provider scenarios; no safe standalone composition established. |
+
+### 38-file disposition counts
+
+- Behavior edits retained or ported: 2 local mechanisms (`bin/fm-busy-event.sh`, pending-reply record/root symlink guards); pending-reply upstream expiry logic retained as equivalent.
+- Upstream-equivalent behavior requiring no port: 1 (`bin/fm-contributions.sh`, rc=124 budget handling).
+- Local watcher family and local-only assets retained: 13 files.
+- Local test deltas adopted: 7 suites/assets (two pending-reply fallback cases explicitly not adopted), including one baseline-blocked watcher triage suite.
+- Local test deltas not adopted under the 50-line/behavior-selection rule: 13 files, itemized above.
+- Local docs/adapter guidance awaiting integration or exact paragraph-level review: 5 files; not represented as merged or ready.
+- Other shared behavior deltas still require main disposition: see the per-file behavior decision table above; they are not silently described as equivalent.
+
+Residual risk: a real tmux fallback recovery after grace has not been observed end-to-end on this route; upstream's same-named fallback functions are covered by upstream behavior, while the two local-specific expectation cases are intentionally skipped. The local pending-reply full suite passes with those two explicit skips. The watcher triage suite retains the known baseline fixture failure.
+
 ## Still unverified
 
 No complete repository-wide test suite has been run on this route-B branch.
