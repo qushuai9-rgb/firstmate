@@ -108,6 +108,68 @@ Thus the exact `[held-delivery] could not build a captain-held backlog fixture` 
 The baseline continues through additional cases because its tasks-axi fixture succeeds there; the branch fixture failure's underlying cause was not captured and remains an environment/test-fixture uncertainty.
 The stale `propose`/`confirm` helper was updated to `enter`; the away-record intent is unchanged.
 
+## Main disposition: captain decision table for the 38 shared local deltas
+
+Main disposition: this table records what route B omits from local main; it does not infer the captain's answer. Where function-level equivalence was not directly established, the stated consequence is a risk to review, not a claim that upstream lacks the behavior.
+
+### Behavior-bearing local changes to review first
+
+| File | Local change from history and short diff | Capability | Concrete loss if omitted | Nature |
+|---|---|---|---|---|
+| `bin/fm-busy-event.sh` | `aececc28 fix(bin): end a mate's in-turn progress evidence when its turn ends`; adds lifecycle progress/end evidence. | Secondmate turn liveness. | Turn evidence can persist past completion or fail to distinguish a later turn; watcher-family integration may lose accurate age evidence. | Local unique behavior; inspect/recover. |
+| `bin/fm-brief.sh` | `d562aba0 fix: harden secondmate runtime state`; 10 inserted lines in task instructions. | Secondmate metadata/runtime-state contract. | Workers may not emit or preserve the local runtime-state evidence expected by the local watcher. | Local behavior/instruction; equivalence unverified. |
+| `bin/fm-contributions.sh` | `56326e0d fix(bin): treat a read killed at its bound as budget refusal`; classifies bounded read termination. | Contribution polling. | A slow but healthy forge read may be treated as unavailable and create repeat notifications. | Local unique fix; prior investigation believed upstream equivalent but this audit did not run a direct comparison. |
+| `bin/fm-control-lib.sh` | `d617f1e7 merge: surface secondmate parent reports`; updates report handling (8 insertions/3 deletions). | Lifecycle report publication. | A secondmate completion/report can fail to reach the parent through the expected status route. | Behavior-bearing; upstream equivalence unverified. |
+| `bin/fm-kimi-turnend-hook.sh` | `1e001934 fix: update kimi cli adapter for 1.50`; 24 insertions/9 deletions. | Kimi turn-end integration. | Kimi 1.50 may no longer receive the local turn-end hook behavior. | Local compatibility fix; upstream hook file absent, equivalence unverified. |
+| `bin/fm-pending-reply-lib.sh` | `016d068b` rebuilds expiry guards; `2f77d836` rejects symlinked records; `a75afb15` resolves sibling path. | Durable reply recovery and expiry. | Invalid/mislocated pending replies may be mishandled, or legitimate replies may remain/escalate incorrectly. | Behavior-bearing security/recovery fixes; must review upstream implementations, not infer from similar upstream commits. |
+| `bin/fm-remote-secondmate-control.sh` | `78921839` hardens remote policy; `fb3c38b6` pins model consistency; `bf8bb399` preserves remote continuation and suppresses idle false alarms; 107 insertions. | Remote secondmate lifecycle and model pinning. | A remote restart may lose continuation policy or accept inconsistent model/policy metadata. | Local unique behavior risk; upstream equivalence unverified. |
+| `bin/fm-secondmate-restart.sh` | `bf8bb399 no-mistakes(review): Preserve remote continuation state and suppress idle false alarms`; preserves `self_continue` on restart. | Remote restart policy. | Restarted mate may silently lose the opt-in continuation behavior or produce false idle alarms. | Behavior-bearing; equivalence unverified. |
+| `bin/fm-spawn.sh` | `fb3c38b6` remote model-pin consistency and `bf8bb399` continuation persistence; 72 insertions/13 deletions. | Spawn identity and secondmate policy. | A remote launch/relaunch can bind the wrong model or omit continuation settings. | Behavior-bearing; upstream equivalents need direct behavioral comparison. |
+| `bin/fm-teardown.sh` | Local merge/reconcile commits alter 3 insertions/2 deletions; local history includes secondmate watchdog integration. | Safe teardown and endpoint cleanup. | A local-only cleanup guard could be omitted; exact semantic delta requires review of the small patch. | Unclassified behavior delta; inspect before disposition. |
+| `tests/fm-pending-reply.test.sh` | `016d068b`, `a75afb15`; 273 added lines. | Pending-reply recovery regressions. | Regression coverage for expiry, path ownership, and symlink safety is lost even if upstream implementation is equivalent. | Local test enhancement/specification. |
+| `tests/fm-secondmate-lifecycle-e2e.test.sh` | `d562aba0` plus local review; 26 insertions/3 deletions. | End-to-end secondmate lifecycle. | Local restart/runtime-state interaction cases are no longer exercised. | Local test enhancement. |
+| `tests/fm-secondmate-safety.test.sh` | `78921839`, `74ab53d9`; 21 insertions. | Safety regressions for secondmate lifecycle. | Locally added remote/watcher safety cases are no longer exercised. | Local test enhancement. |
+| `tests/fm-watch-triage.test.sh` | `fb3c38b6`, `bf8bb399`, `e475cbc0`; 524 inserted lines. | Provider errors, idle lapse, turn hang, and product-output evidence. | Local watcher-specific regressions and specifications are absent from the upstream-based branch. | Local test enhancement; watcher implementation itself is retained. |
+| `tests/fm-wake-queue.test.sh` | `aececc28`, `119a1a5c`; 123 insertions. | Queue/liveness edge cases. | Tests for local secondmate queue and age evidence are lost. | Local test enhancement. |
+| `tests/secondmate-helpers.sh` | `84a903b5`, `74ab53d9`; 6 insertions/1 deletion. | Shared fixtures used by secondmate tests. | Local fixture semantics may no longer reproduce the cases that motivated watcher fixes. | Test support change; inspect with corresponding suites. |
+
+### Remaining shared-file review inventory
+
+| File | Local delta from `git log 8d9d5dac..main -- <file>` | Capability and loss if omitted | Nature |
+|---|---|---|---|
+| `.agents/skills/harness-adapters/references/harness/kimi.md` | `1e001934 fix: update kimi cli adapter for 1.50` | Kimi version-specific launch and trust guidance; local 1.50 guidance might be absent under newer upstream guidance. | Documentation/adapter guidance; version-equivalence unverified. |
+| `.agents/skills/secondmate-provisioning/SKILL.md` | `9ceb5086 no-mistakes(document): Document FM_SECONDMATE_SELF_CONTINUE in config and provisioning skill` | Documents the opt-in continuation charter. | Local documentation delta; upstream presence not verified. |
+| `tests/fm-backlog-atomicity.test.sh` | `d617f1e7`, `1e001934` | Backlog atomicity coverage for local report/Kimi changes. | Test enhancement; specific added assertions not individually compared. |
+| `tests/fm-classify-corr-token.test.sh` | `56e76032 test: give the reserved-key fixtures their durable owner` | Correlation-token reserved-key fixture ownership. | Test-only fixture correction; risk is loss of that regression. |
+| `tests/fm-classify-decision-key.test.sh` | `a75afb15`, `0378ebd4`, `9109afb5`; 90 insertions/146 deletions | Relative-path pending-reply classification and expiry cases. | Local test specification; upstream behavior is not proven identical by commit history. |
+| `tests/fm-control-relaunch.test.sh` | `d562aba0` and local merge integrations; 74 insertions | Relaunch preserves secondmate-specific metadata. | Test enhancement; concrete behavior ties to restart/spawn above. |
+| `tests/fm-harness-adapter-instructions-live-e2e.test.sh` | `1e001934`, `d617f1e7` | Live adapter instruction assertions for Kimi and parent reports. | Test enhancement. |
+| `tests/fm-harness-liveness-drift-live-e2e.test.sh` | Local watchdog merge commits; 2 insertions/2 deletions | Liveness drift coverage. | Test adjustment; no function-level equivalence audit. |
+| `tests/fm-kimi-harness.test.sh` | `d5ef97e8 fix(kimi): match CLI 1.50 banner text in spawn readiness gate`; local integration adds tests. | Kimi 1.50 readiness and turn-end behavior. | Test enhancement tied to Kimi compatibility; upstream supports newer Kimi but equivalence unverified. |
+| `tests/fm-pi-primary-types.test.sh` | `aaca26a3` watchdog integration; 1 insertion | Pi primary type/extension compatibility. | Test enhancement for local watchdog event. |
+| `tests/fm-remote-secondmate-lifecycle-e2e.test.sh` | `78921839`, `fb3c38b6`; 48 insertions | Remote restart policy and model-pin regression coverage. | Test enhancement. |
+| `tests/fm-secondmate-harness.test.sh` | `d562aba0`; 28 insertions | Secondmate harness runtime-state coverage. | Test enhancement. |
+| `tests/fm-secondmate-restart.test.sh` | `bf8bb399`; 7 insertions/3 deletions | Continuation metadata survives remote restart. | Test enhancement tied to behavior-bearing restart change. |
+| `tests/fm-send-inbox-doorbell-live-e2e.test.sh` | Local integration commits; 49 insertions/10 deletions | End-to-end durable steering inbox behavior in secondmate scenarios. | Test enhancement. |
+| `tests/fm-spawn-dispatch-profile.test.sh` | Local integration commits; 57 insertions/2 deletions | Dispatch profile and fallback coverage. | Test enhancement; upstream behavior should be checked against the local assertions. |
+| `tests/fm-wake-drain-open-decisions.test.sh` | `56e76032`, `a75afb15`; 95 insertions | Reserved keys and relative pending-reply open-decision handling. | Test enhancement/specification. |
+| `tests/fm-wake-drain-unread-status.test.sh` | `8d6d2b43`, `73286dce3c`; 77 insertions | Parent reports appear in order and are not duplicated. | Test enhancement; upstream behavior exists but exact local assertions need comparison. |
+| `tests/fm-secondmate-bash-watchdog.test.sh` | `aaca26a3` | Local watchdog timeout/recovery regression; retained as a local-only asset, not omitted. | Class B retained. |
+| `tests/fm-watch-triage.test.sh` | Listed above as behavior-specifying local watcher test; retained from local main in the preserved watcher family. | Not omitted on route B. | Class B retained. |
+| `tests/fm-wake-queue.test.sh` | Listed above; retained as local watcher-family test. | Not omitted on route B. | Class B retained. |
+| `bin/fm-watch.sh`, `bin/fm-classify-lib.sh`, `bin/fm-wake-lib.sh`, `bin/fm-wake-drain.sh` | Local watcher implementations retained. | Core route-B preserved family. | Class B retained. |
+
+### Local unique behavior fixes and current-problem assessment
+
+- `bin/fm-busy-event.sh` local commit `aececc28` is titled “end a mate's in-turn progress evidence when its turn ends”; the fix removes stale turn-progress evidence at turn completion. It addresses a mate being treated as still in an old turn after completion. Upstream does not contain this helper file; current equivalent behavior elsewhere has not been verified. **Potential current gap: unverified.**
+- `bin/fm-contributions.sh` local commit `56326e0d` says “treat a read killed at its bound as budget refusal”; the short diff maps rc 124 to `BUDGET_EXHAUSTED`. The intended problem is a bounded slow read being mislabeled as unavailable forge evidence. Upstream `origin/main:bin/fm-contributions.sh`, `forge()`, has related timeout handling, but same-input behavior was not replayed in this audit. **Likely equivalent, runtime equivalence unverified.**
+- `bin/fm-pending-reply-lib.sh` local commits explicitly rebuild expiry guards, reject symlinked records, resolve sibling paths with `dirname`, and harden relative ownership. These protect record integrity and ensure expiration/path decisions apply to the intended task. Upstream contains newer pending-reply ownership/resolve commits, but each local guard was not individually tested against upstream. **Current gaps: unverified.**
+- `bin/fm-remote-secondmate-control.sh` and `bin/fm-secondmate-restart.sh` local changes preserve remote continuation policy and model-pin consistency across relaunch. This prevents a restart from changing the selected model or silently disabling self-continuation. Upstream has remote metadata republication and lifecycle improvements, but no same-input runtime comparison was performed. **Current gaps: unverified.**
+- `bin/fm-spawn.sh` local changes enforce consistency between remote launch policy and recorded model pin. The concrete loss could be a remote mate launched under a different model than its durable record or losing its continuation choice. Upstream has substantial spawn changes; equivalent behavior remains **unverified**.
+
+Summary counts for the shared-file inventory: local behavior-bearing changes needing direct review: 10; local test-only or test-support enhancements: 19; documentation/adapter-guidance changes: 5; small/unclassified implementation deltas needing diff review: 4. These are review categories, not claims that upstream lacks each behavior.
+The 38-file inventory is not cleared for landing by this table; main disposition must decide whether to recover any behavior-bearing local changes or accept them as explicit drops.
+
 ## Still unverified
 
 No complete repository-wide test suite has been run on this route-B branch.
