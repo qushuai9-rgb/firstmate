@@ -238,6 +238,16 @@ if [ -f "$REC" ]; then
       ;;
   esac
 fi
+# Progress belongs to the active busy turn. Retire it whenever that turn ends,
+# so a completed turn cannot keep proving liveness from stale progress evidence.
+if [ "$NEW_STATE" != busy ]; then
+  rm -f "$STATE/$ID.progress" || {
+    lock_release
+    umask "$old_umask"
+    echo "error: busy-state progress cleanup failed for $ID" >&2
+    exit 1
+  }
+fi
 write_record "$GEN" $((OLD_SEQ + 1)) || {
   lock_release
   umask "$old_umask"

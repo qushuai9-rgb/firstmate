@@ -170,6 +170,23 @@ Main disposition: this table records what route B omits from local main; it does
 Summary counts for the shared-file inventory: local behavior-bearing changes needing direct review: 10; local test-only or test-support enhancements: 19; documentation/adapter-guidance changes: 5; small/unclassified implementation deltas needing diff review: 4. These are review categories, not claims that upstream lacks each behavior.
 The 38-file inventory is not cleared for landing by this table; main disposition must decide whether to recover any behavior-bearing local changes or accept them as explicit drops.
 
+## Behavior-port follow-up under main disposition
+
+| File | Local delta | Port decision | Test command/result |
+|---|---|---|---|
+| `bin/fm-contributions.sh` | Local rc=124 marks the bounded read as budget exhaustion. | No port needed: inspected `origin/main:bin/fm-contributions.sh` `forge()` lines 217-233; it handles rc=124 by setting `BUDGET_EXHAUSTED=1` and writing `$TMP/budget-exhausted`. | Existing historical suite not rerun in this pass. |
+| `bin/fm-busy-event.sh` | On a transition to non-busy, remove `$STATE/$ID.progress`, refusing the transition if cleanup fails; otherwise stale progress can survive turn completion. | Ported this behavior into the upstream implementation after `OLD_SEQ` parsing and before `write_record`, preserving the upstream writer. | `bash tests/fm-busy-state.test.sh`: 1/1 passed. |
+| `bin/fm-pending-reply-lib.sh` | Local delta includes expiry guards, symlink refusal, and relative sibling-path resolution; 146 inserted lines. | Not ported: exceeds the authorized small-change boundary (>50 lines) and requires careful reconciliation against upstream's changed ownership/expiry semantics. Stop for main review rather than risk changing recovery behavior. | Not rerun in this pass; existing focused historical result in report remains. |
+| `bin/fm-brief.sh` | Ten-line local additions around secondmate runtime-state guidance. | Pending per-file behavior review; no port performed. | Not run. |
+| `bin/fm-control-lib.sh` | Eight additions/three removals from report/lifecycle integration. | Pending behavior-level comparison; no port performed. | Not run. |
+| `bin/fm-kimi-turnend-hook.sh` | Local Kimi CLI 1.50 compatibility adjustment; upstream file exists in current base though absent at merge-base. | Pending comparison of hook payload/config behavior; no port performed. | Not run. |
+| `bin/fm-remote-secondmate-control.sh` | Remote policy/model pin/continuation hardening; 107 insertions. | Not ported pending comparison with upstream remote lifecycle structures; scope likely exceeds small additive adaptation. | Not run. |
+| `bin/fm-secondmate-restart.sh` | Preserve remote continuation policy across restart. | Pending test-backed comparison to upstream metadata republication path; no port performed. | Not run. |
+| `bin/fm-spawn.sh` | Preserve remote model pin and continuation policy; 72 insertions/13 removals. | Not ported pending behavior review; no edits to upstream spawn semantics. | Not run. |
+| `bin/fm-teardown.sh` | Small local changes in secondmate cleanup path. | Pending exact hunk review; no port performed. | Not run. |
+
+The approved per-file stop condition is active for `bin/fm-pending-reply-lib.sh`: its local delta is 146 inserted lines, above the 50-line limit, and upstream semantics changed in the same area. No further behavior ports were attempted after identifying this scope boundary.
+
 ## Still unverified
 
 No complete repository-wide test suite has been run on this route-B branch.
