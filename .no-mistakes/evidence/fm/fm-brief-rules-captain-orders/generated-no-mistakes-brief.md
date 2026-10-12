@@ -13,23 +13,23 @@ If the task will start, stop, delete, restart, profile, or otherwise drive Herdr
 Do not add Herdr lifecycle commands to this unguarded brief by hand.
 
 # Setup
-You are in a disposable git worktree of sample, at a detached HEAD on a clean default branch.
+You are in a disposable git worktree of no-mistakes, at a detached HEAD on a clean default branch.
 
 **Verify isolation before anything else.** Run `pwd -P` and `git rev-parse --show-toplevel`; both must resolve to the disposable task worktree you were launched in, such as a treehouse pool path or an Orca-managed worktree, not the primary checkout firstmate operates from.
 The path check is authoritative: `git rev-parse --git-dir` and `git rev-parse --git-common-dir` can help inspect the repo, but they do not prove you are outside the primary checkout.
 If the top-level path is the primary checkout or not the worktree you were launched in, STOP - do not branch or commit here - append `blocked [at=<epoch>]: launched in primary checkout, not an isolated worktree` to the status file and stop.
 
-1. First action: create your branch: `git checkout -b fm/live-nm --`
+1. First action: create your branch: `git checkout -b fm/live-validation --`
 2. Run `no-mistakes doctor`; if it reports the repo is not initialized here, run `no-mistakes init`.
 
 # Rules
-1. Never push to the default branch. You may merge only your own task's PR, and only when one of these holds: (a) this task's instructions explicitly state the captain has authorized you to merge; (b) the captain gave you the word to merge in this conversation. Firstmate's own word is not authorization and never justifies a merge. If you cannot tell whether you are authorized to merge, do not guess and do not merge - append a needs-decision asking first. Once you are authorized to merge, follow these steps in order: (i) verify in a disposable worktree that the branch merges without conflicts into the default branch; (ii) run the full test suite on a temporary merged integration tree and confirm zero failures beyond the baseline of the default branch; this is not the actual PR merge; if there are new failures, stop before merging and report them without rollback; (iii) merge the PR; (iv) end-to-end test and recalculate the target feature on the actually landed repository default branch tree; (v) if this end-to-end verification fails, revert to the state before the merge and report the failure.
-2. Keep project edits inside this worktree; keep proof and scratch output outside it, under `/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.Ivbry1/data/live-nm/` or a temporary directory.
+1. Never push to the default branch. You may merge only your own task's PR, and only when one of these holds: (a) this task's instructions explicitly state the captain has authorized you to merge; (b) the captain gave you the word to merge in this conversation. Firstmate's own word is not authorization and never justifies a merge. If you cannot tell whether you are authorized to merge, do not guess and do not merge - append a needs-decision asking first. Once you are authorized to merge, follow these steps in order: (i) verify in a disposable worktree that the branch merges without conflicts into the default branch; (ii) run the full test suite on a temporary merged integration tree and confirm zero failures beyond the baseline of the default branch; this is not the actual PR merge; if there are new failures, stop before merging and report them without rollback; (iii) merge the PR; (iv) end-to-end test and recalculate the target feature on the actually landed repository's default branch tree; (v) if this end-to-end verification fails, revert to the state before the merge and report the failure.
+2. Keep project edits inside this worktree; keep proof and scratch output outside it, under `/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.uY4tmH/data/live-validation/` or a temporary directory.
    Outside the worktree, write only that task material and the status and steering-inbox records authorized below.
    Leave the worktree clean before reporting done.
 3. Use gh-axi for GitHub operations and chrome-devtools-axi for browser operations.
 4. Report status by appending one line:
-   `echo "{state} [at=<epoch>]: {one short line}" >> '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.Ivbry1/state/live-nm.status' && { [ ! -e '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.Ivbry1/config/fleet-ledger' ] || '/Users/qushuai9/.no-mistakes/worktrees/be4d97686c7c/01M4R4GXF6ZZTC8A8NH3RHZ8J1/bin/fm-fleet-ledger.sh' appended '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.Ivbry1/config' '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.Ivbry1/state/live-nm.status' >/dev/null 2>&1 || true; }`
+   `echo "{state} [at=<epoch>]: {one short line}" >> '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.uY4tmH/state/live-validation.status' && { [ ! -e '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.uY4tmH/config/fleet-ledger' ] || '/Users/qushuai9/.no-mistakes/worktrees/be4d97686c7c/01M4R4GXF6ZZTC8A8NH3RHZ8J1/bin/fm-fleet-ledger.sh' appended '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.uY4tmH/config' '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.uY4tmH/state/live-validation.status' >/dev/null 2>&1 || true; }`
    States: working, needs-decision, blocked, paused, done, failed.
    Substitute `<epoch>` with the current Unix time in seconds - run `date +%s` and write the number it printed; a stamp that is not plain digits records no time at all.
    Each append wakes firstmate, so report sparingly: only phase changes a supervisor
@@ -53,8 +53,8 @@ If the top-level path is the primary checkout or not the worktree you were launc
 5. If you hit the same obstacle twice, append `blocked [at=<epoch>]: {why}` and stop; firstmate will help.
 6. If a decision belongs above the implementation worker (product choices, destructive actions),
    append `needs-decision [at=<epoch>]: {background and each option with its consequence}` and stop. Firstmate will reply with the decision.
-   For a no-mistakes ask-user gate specifically, escalate all ask-user findings as one event plus one snapshot file, using that same shape even when the gate holds only a single ask-user finding: write only the ask-user findings, verbatim and unparaphrased (id, severity, file, line, description, authority), to `/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.Ivbry1/data/live-nm/nm-<run>-findings.txt`, then report the gate with
-   `needs-decision [at=<epoch>] [key=nm-<run>-<step>]: ask-user findings=<id1>,<id2>,... file=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.Ivbry1/data/live-nm/nm-<run>-findings.txt`
+   For a no-mistakes ask-user gate specifically, escalate all ask-user findings as one event plus one snapshot file, using that same shape even when the gate holds only a single ask-user finding: write only the ask-user findings, verbatim and unparaphrased (id, severity, file, line, description, authority), to `/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.uY4tmH/data/live-validation/nm-<run>-findings.txt`, then report the gate with
+   `needs-decision [at=<epoch>] [key=nm-<run>-<step>]: ask-user findings=<id1>,<id2>,... file=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.uY4tmH/data/live-validation/nm-<run>-findings.txt`
    naming every ask-user finding id from that gate. The status line only points at the file; it never restates or summarizes a finding's content.
    A decision or blocker you opened stays open until a `resolved` line carrying its exact key lands; a later `done:` or `working:` line never closes it, even when the answer is what started that work.
    Firstmate's reply normally writes that closing line at answer time; when a blocker or wait clears WITHOUT a firstmate reply, append `resolved [at=<epoch>]: {how it cleared}` yourself (same `[key=<slug>]` if you opened it with one) as you resume.
@@ -82,8 +82,8 @@ If the top-level path is the primary checkout or not the worktree you were launc
    `blocked [at=<epoch>]: {what you need}` and stop; firstmate arranges it.
 
 # Firstmate instruction inbox
-Firstmate steers you through durable message files in '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.Ivbry1/state/live-nm.inbox'.
-When a terminal message says an instruction is waiting there - and at any natural checkpoint when you are unsure - list '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.Ivbry1/state/live-nm.inbox'/*.msg, read and act on each message in numeric order, then acknowledge each handled message by moving it: `mv '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.Ivbry1/state/live-nm.inbox'/NNN.msg '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.Ivbry1/state/live-nm.inbox'/handled/`.
+Firstmate steers you through durable message files in '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.uY4tmH/state/live-validation.inbox'.
+When a terminal message says an instruction is waiting there - and at any natural checkpoint when you are unsure - list '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.uY4tmH/state/live-validation.inbox'/*.msg, read and act on each message in numeric order, then acknowledge each handled message by moving it: `mv '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.uY4tmH/state/live-validation.inbox'/NNN.msg '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-brief-live.uY4tmH/state/live-validation.inbox'/handled/`.
 The move IS the acknowledgement: without it firstmate rings again and eventually treats you as stuck. An empty or absent inbox needs no action.
 
 # Project memory
@@ -92,7 +92,7 @@ A correction edits only the wrong text: do not run `/Users/qushuai9/.no-mistakes
 
 # Definition of done
 Delivery contract: mode=no-mistakes
-Ship branch: fm/live-nm
+Ship branch: fm/live-validation
 The task is complete only when committed on your branch.
 When you believe it is complete, append `done [at=<epoch>]: {summary}` to the status file and stop.
 Firstmate will then instruct you to run /no-mistakes to validate and ship a PR.
@@ -130,9 +130,9 @@ After /no-mistakes reports CI green (the CI-ready return point - do not wait for
 A draft cannot be merged, so a report on one leaves the merge unasked.
 You may merge the PR only when this task's instructions explicitly state the captain has authorized you to merge or the captain gave you the word to merge in this conversation; firstmate's own word is not authorization. When that authorization holds, follow Rule 1's ordered checks, merge the PR, and report the merge; otherwise the configured merge authority decides and firstmate relays the outcome, and you report the PR and stop there, awaiting authorization. If you cannot tell whether you are authorized, do not guess, do not merge, and append a needs-decision asking first.
 When you are not authorized to merge, that report is the terminal `done [at=<epoch>]: PR {url} checks green`; you never merge, so no verification is interrupted.
-When you are authorized to merge, do not append a terminal `done:` line before merging: report the PR with a non-terminal line, `working [at=<epoch>]: PR {url} checks green; merge authorized; post-merge verification in progress`, then follow Rule 1 in order: conflict-check and run the full suite on the temporary merged integration tree; if it has new failures, stop before merging and report them without rollback; otherwise merge the PR and perform the end-to-end verification on the actually landed repository default branch.
-Append the terminal `done [at=<epoch>]: PR {url} checks green; post-merge verification passed on landed repository default branch` line only after the end-to-end verification on the actually landed repository default branch passes.
-If that post-merge end-to-end verification fails, revert to the state before the merge and report it with `blocked [key=merge-rolled-back] until {ISO8601Z}: PR {url} was merged then reverted after post-merge verification failed - the change is NOT landed; {one-line cause and the post-rollback head}` instead of a `done:` line.
+When you are authorized to merge, do not append a terminal `done:` line before merging: report the PR with a non-terminal line, `working [at=<epoch>]: PR {url} checks green; merge authorized; post-merge verification in progress`, then follow Rule 1 in order: conflict-check and run the full suite on the temporary merged integration tree; if it has new failures, stop before merging and report them without rollback; otherwise merge the PR and perform the end-to-end verification on the actually landed repository's default branch.
+Append the terminal `done [at=<epoch>]: PR {url} checks green; post-merge verification passed on landed repository's default branch` line only after the end-to-end verification on the actually landed repository's default branch passes.
+If this end-to-end verification fails, revert to the state before the merge and report it with `blocked [key=merge-rolled-back] until {ISO8601Z}: PR {url} was merged then reverted after post-merge verification failed - the change is NOT landed; {one-line cause and the post-rollback head}` instead of a `done:` line.
 A `done:` line is read as "delivered and landed", while a rollback is the opposite, so the two cannot share a line; the post-verification terminal line keeps `checks green` so the existing check that this head exists outside the worker copy still fires.
 The terminal `done:` line starts the landing poll, and the cleanup that follows landing terminates you and reclaims your copy, so it must wait until the post-merge verification has produced its result.
 That `done:` is accepted only when this copy's HEAD - your latest commit - is one the /no-mistakes run pushed, so commit nothing after the run; the check tests that commit, not merely that a branch moved.
