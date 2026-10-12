@@ -1023,7 +1023,7 @@ secondmate_provider_error_tick() {
   # `returned 502` is a failure only when the code closes the clause; the same
   # shape in `returned 500 items` or `returned 502 requests` is ordinary output.
   error_re="$error_re|(^|[^A-Za-z0-9])(returned|received|got)[^0-9A-Fa-f]{0,12}5[0-9][0-9]$code_end"
-  error_re="$error_re|((rate[ -]?limit|quota|too[[:space:]]+many[[:space:]]+requests|concurren(cy|t)).*(limit|exceed|busy|request))"
+  error_re="$error_re|((429[[:space:]]+too[[:space:]]+many[[:space:]]+requests)|(rate[ -]?limit|quota|concurren(cy|t))[^.!?]{0,40}(exceeded|reached|hit|exceed|busy))"
   for meta in "$STATE"/*.meta; do
     [ -e "$meta" ] || continue
     kind=$(fm_meta_get "$meta" kind)
