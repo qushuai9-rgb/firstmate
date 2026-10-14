@@ -1,0 +1,10 @@
+=== direct-PR ===
+1. Never push to the default branch (push only your `fm/live-direct-PR` branch). Never merge a PR.
+The configured merge authority decides whether to merge the PR; firstmate relays the outcome. You never merge a PR.
+=== no-mistakes ===
+1. Never push to the default branch. Never merge a PR.
+The configured merge authority decides whether to merge the PR; firstmate relays the outcome. You never merge a PR.
+=== scout decision escalation ===
+   append `needs-decision [at=<epoch>]: {background and each option with its consequence}` and stop. Firstmate will reply with the decision.
+=== secondmate decision policy ===
+When escalating a decision, include its background and the consequence of each option.
