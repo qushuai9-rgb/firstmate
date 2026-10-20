@@ -1,0 +1,12 @@
+# live pi version: 0.84.2 (package 0.84.2)
+# baseline: {"agentDir":"/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-trust-live.7y7Mvu/agent","trustGating":true,"decision":null,"resolved":false}
+ok - pi 0.84.2: an unregistered task worktree resolves untrusted
+# after registration: {"agentDir":"/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-trust-live.7y7Mvu/agent","trustGating":true,"decision":true,"resolved":true}
+ok - pi 0.84.2: the worktree fm-pi-trust.sh registered resolves trusted with no dialog
+# ancestor-true: {"agentDir":"/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-trust-live.7y7Mvu/agent-ancestor-true","trustGating":true,"decision":true,"resolved":true}
+ok - pi 0.84.2: a trusted ancestor with no exact key resolves the worktree trusted
+# ancestor-false: {"agentDir":"/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-trust-live.7y7Mvu/agent-ancestor-false","trustGating":true,"decision":false,"resolved":false}
+ok - pi 0.84.2: an inherited 'Do not trust' resolves untrusted with no dialog
+# null-skips: {"agentDir":"/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-trust-live.7y7Mvu/agent-null-skips","trustGating":true,"decision":true,"resolved":true}
+ok - pi 0.84.2: a nearer null entry is skipped and the trusted ancestor resolves
+# all fm-pi-trust-live-e2e checks passed (5)

@@ -1,0 +1,12 @@
+first rc=0  second rc=0
+--- second spawn output:
+warning: /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-adv-repeat.6HvNl9/home/data/repeat-two/launch-brief.md records no ship branch; defaulting to legacy branch fm/repeat-two
+warning: /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-adv-repeat.6HvNl9/home/data/repeat-two/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+spawned repeat-two harness=pi kind=ship mode=no-mistakes yolo=off window=firstmate:fm-repeat-two worktree=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-adv-repeat.6HvNl9/wt
+--- store stable across relaunch: yes
+--- store:
+{
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-adv-repeat.6HvNl9/wt": true
+}
+--- launches recorded:        2
+LAB=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-adv-repeat.6HvNl9

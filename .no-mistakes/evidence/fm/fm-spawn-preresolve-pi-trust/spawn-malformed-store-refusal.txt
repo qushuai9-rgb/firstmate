@@ -1,0 +1,10 @@
+rc=1
+warning: /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-adv-malformed.RRIgy3/home/data/malformed/launch-brief.md records no ship branch; defaulting to legacy branch fm/malformed
+warning: /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-adv-malformed.RRIgy3/home/data/malformed/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+error: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-adv-malformed.RRIgy3/home/user-home/.pi/agent/trust.json is not a JSON object
+error: refusing to pre-register Pi trust: could not record trust for '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-adv-malformed.RRIgy3/wt' in '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-adv-malformed.RRIgy3/home/user-home/.pi/agent/trust.json'
+error: could not pre-register Pi project trust for /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-adv-malformed.RRIgy3/wt; refusing to launch a pi worker that would wedge on the trust dialog; inspect window firstmate:fm-malformed
+--- store after:
+[]
+--- launch.log present: no
+LAB=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-adv-malformed.RRIgy3

@@ -1,0 +1,12 @@
+rc=1
+warning: /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-adv-declined.YrSPXT/home/data/declined/launch-brief.md records no ship branch; defaulting to legacy branch fm/declined
+warning: /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-adv-declined.YrSPXT/home/data/declined/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+error: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-adv-declined.YrSPXT/home/user-home/.pi/agent/trust.json records "Do not trust" for /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-adv-declined.YrSPXT, which Pi applies to /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-adv-declined.YrSPXT/wt; refusing to reverse a decision the operator already made. Change or remove the /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-adv-declined.YrSPXT entry in /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-adv-declined.YrSPXT/home/user-home/.pi/agent/trust.json to allow this spawn
+error: refusing to pre-register Pi trust: could not record trust for '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-adv-declined.YrSPXT/wt' in '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-adv-declined.YrSPXT/home/user-home/.pi/agent/trust.json'
+error: could not pre-register Pi project trust for /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-adv-declined.YrSPXT/wt; refusing to launch a pi worker that would wedge on the trust dialog; inspect window firstmate:fm-declined
+--- store after:
+{
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-adv-declined.YrSPXT": false
+}
+--- launch.log present: no
+LAB=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-adv-declined.YrSPXT

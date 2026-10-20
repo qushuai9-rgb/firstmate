@@ -1,0 +1,7 @@
+$ bin/fm-pi-trust.sh <worktree>/sub <project>
+error: refusing to pre-register Pi trust: '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.tlwDzh/slot/sub' is not a worktree root (its root is '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.tlwDzh/slot')
+exit=1
+
+$ bin/fm-pi-trust.sh <primary-checkout> <primary-checkout>
+error: refusing to pre-register Pi trust: '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.tlwDzh/project' is a primary checkout, not an isolated worktree
+exit=1

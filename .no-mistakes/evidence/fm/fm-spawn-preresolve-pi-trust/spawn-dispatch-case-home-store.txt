@@ -1,0 +1,9 @@
+spawn rc=0
+warning: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-disp-iso.35xdMc/profile-relative-paths/home/data/profile-relative-paths-z1b/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+spawned profile-relative-paths-z1b harness=pi kind=ship mode=no-mistakes yolo=off window=firstmate:fm-profile-relative-paths-z1b worktree=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-disp-iso.35xdMc/profile-relative-paths/wt
+--- case HOME Pi store:
+{
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-disp-iso.35xdMc/profile-relative-paths/wt": true
+}
+--- expected worktree: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-disp-iso.35xdMc/profile-relative-paths/wt
+--- lab: /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-disp-iso.35xdMc

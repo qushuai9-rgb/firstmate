@@ -1,0 +1,14 @@
+LAB=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-spawn-order.4gm28j
+spawn_rc=0
+warning: /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-spawn-order.4gm28j/home/data/order-proof/launch-brief.md records no ship branch; defaulting to legacy branch fm/order-proof
+warning: /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-spawn-order.4gm28j/home/data/order-proof/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+spawned order-proof harness=pi kind=ship mode=no-mistakes yolo=off window=firstmate:fm-order-proof worktree=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-spawn-order.4gm28j/wt
+--- order.log:
+[launch moment] store=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-spawn-order.4gm28j/home/user-home/.pi/agent/trust.json entry(/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-spawn-order.4gm28j/wt)=true
+--- store:
+{
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-spawn-order.4gm28j/wt": true
+}
+--- launch.log:
+export COMPACT_ADVISER_DISABLE=1; export FM_TASK_INBOX='/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-spawn-order.4gm28j/home/state/order-proof.inbox'; '/Users/qushuai9/.no-mistakes/worktrees/be4d97686c7c/01M5CQEE930P8QWVYT3S0J7QD0/bin/fm-git-strip-ai-trailers.sh' env-file '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-spawn-order.4gm28j/home/state/order-proof.git-hooks' '/tmp/fm-order-proof+74abc7758f59d62c7f14d40918c62fd8b239c094b0c8f15cdbc1d16e8d77788e/git-config.s1792509163.962.16240.sh' && . '/tmp/fm-order-proof+74abc7758f59d62c7f14d40918c62fd8b239c094b0c8f15cdbc1d16e8d77788e/git-config.s1792509163.962.16240.sh' || return 1 2>/dev/null || exit 1; env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI FM_PI_HARNESS=pi '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-spawn-order.4gm28j/fake/fakebin/pi' --tui-mode regular -e '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-spawn-order.4gm28j/home/state/order-proof.pi-ext.ts' "$('/Users/qushuai9/.no-mistakes/worktrees/be4d97686c7c/01M5CQEE930P8QWVYT3S0J7QD0/bin/fm-operational-input.sh' encode launch-brief < '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-spawn-order.4gm28j/home/data/order-proof/launch-brief.md')"
+LAB_FOR_EVIDENCE=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-spawn-order.4gm28j
