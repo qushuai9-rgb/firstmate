@@ -1,0 +1,4 @@
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.IsvsJp
+warning: secondmate sm-nocharter-q7 sync skipped before launch: primary default-branch commit cannot be resolved
+error: secondmate sm-nocharter-q7 has no usable charter: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-secondmate.Ze2Kiv/data/charter.md is missing and the parent copy /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.IsvsJp/data/sm-nocharter-q7/brief.md is absent; seed the home with bin/fm-home-seed.sh, or place the charter at /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-secondmate.Ze2Kiv/data/charter.md
+exit=1

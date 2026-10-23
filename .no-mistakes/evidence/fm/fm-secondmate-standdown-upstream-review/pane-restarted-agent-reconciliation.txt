@@ -1,0 +1,171 @@
+ New version 1.4.0 is available. Run pi update
+ Changelog: https://pi.dev/changelog
+──────────────────────────────────────────────────────
+
+ I'll start by running the session startup for my own
+ home.
+
+
+ $ cd
+ /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000
+ gn/T/fm-secondmate.qDa1yH && bin/fm-session-start.sh
+ 2>&1 | head -200
+
+ ... (5 earlier lines, ctrl+o to expand)
+ firstmate-owned command runs inside a project clone.
+ Reach the target without moving the shell - use git
+ -C <dir> or an absolute path on the command itself -
+ or scope the cd to a subshell like (cd <dir> &&
+ ...)."}
+
+ Took 0.1s
+
+
+ The bash tool's cd was blocked. Use absolute path
+ without cd.
+
+
+ $
+ /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000
+ gn/T/fm-secondmate.qDa1yH/bin/fm-session-start.sh
+ 2>&1 | head -250
+
+ ... (398 earlier lines, ctrl+o to expand)
+
+ The digest above is complete for this session start.
+ The READ-ONCE CONTRACT
+ section near the top of it governs what may still be
+ read from disk.
+
+ Took 2.5s
+
+
+ Let me handle the wake queue. Drain wakes.
+
+ Also need initial fm_watch_arm_pi call (step 3:
+ initial process cycle only).
+
+ Also the charter mentions an instruction inbox and
+ parent channel. Let me check inbox.
+
+ First drain wakes.
+
+
+ $
+ /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000
+ gn/T/fm-secondmate.qDa1yH/bin/fm-wake-drain.sh 2>&1
+ | head -60; echo "---INBOX---"; find
+ '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//f
+ m-lab.IsvsJp/state/sm-live-q7.inbox' -maxdepth 1
+ -name '*.msg' 2>/dev/null | sort -V
+
+ ... (1 earlier lines, ctrl+o to expand)
+ reconciled after the real process restart
+ WAKE_ACK_REQUIRED: after handling completes run       bin/fm-wake-drain.sh --ack-through 1
+ --recovery-generation 97675.1792784988.PCMU3J         ---INBOX---
+                                                       Took 0.4s
+ The wake is a leftover signal from sm-live-restart:
+ done: reconciled after the real process restart.
+ That's an old task, already reconciled. No meta
+ under state (none listed). So nothing to do — I can
+ acknowledge.
+
+ Let me verify no meta exists and check state dir.
+
+
+ $ ls -la
+ /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000
+ gn/T/fm-secondmate.qDa1yH/state/ 2>&1 | head -30;
+ echo "---";
+ /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000
+ gn/T/fm-secondmate.qDa1yH/bin/fm-crew-state.sh 2>&1
+ | head -20
+
+ ... (52 earlier lines, ctrl+o to expand)
+ home-summary.json
+ drwxr-xr-x   2 qushuai9  staff    64 Oct 24 03:48
+ terminal-outcomes
+ ---
+ usage: fm-crew-state.sh <id>
+
+ Took 0.6s
+
+
+ No .meta files, no in-flight work. The wake is a
+ stale leftover about a task "sm-live-restart" that
+ was already reconciled (done, and its backlog item
+ closed by bootstrap).
+
+ There's .watcher-down and .watch-cycle-exits.log.
+ Let me check if the watcher is healthy. The
+ instructions say only call fm_watch_arm_pi for the
+ first required cycle. This is session start, step 3
+ says initial process cycle only: make the one
+ required fm_watch_arm_pi call.
+
+ Let me check .watcher-down content first.
+
+ Also check parent status file for context and the
+ correlation. Let me acknowledge the wake, then arm.
+
+
+ $
+ D=/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr00
+ 00gn/T/fm-secondmate.qDa1yH; cat
+ $D/state/.watcher-down; echo "---exits---"; tail -20
+ $D/state/.watch-cycle-exits.log; echo "---parent
+ status tail---"; tail -20
+ '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//f
+ m-lab.IsvsJp/state/sm-live-q7.status' 2>&1
+
+ ... (17 earlier lines, ctrl+o to expand)
+ -lab.IsvsJp/state/sm-live-q7.status: No such file or
+ directory
+
+
+ Command exited with code 1
+
+ Took 0.0s
+
+
+ The parent status file doesn't exist yet. Wait — the
+ charter says that file IS the captain. Let me check
+ the directory.
+
+ Also, this is a fresh home (created Oct 24). The
+ wake row sm-live-restart is a leftover from
+ provisioning test.
+
+ Let me check the parent channel dir.
+
+
+ $ ls -la
+ '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//f
+ m-lab.IsvsJp/state/' 2>&1 | head -30
+
+ ... (10 earlier lines, ctrl+o to expand)
+ sm-live-q7.git-hooks
+ -rw-r--r--   1 qushuai9  staff   628 Oct 24 03:49
+ sm-live-q7.meta
+ -rw-r--r--   1 qushuai9  staff  3403 Oct 24 03:49
+ sm-live-q7.pi-ext.ts
+
+ Took 0.0s
+
+
+ No .status file exists yet for this secondmate home.
+ That means I haven't appended anything. Fine.
+
+ Now let me acknowledge the wake and then arm the
+ watcher (initial cycle).
+
+ Actually order: handle the wake (nothing actionable
+ — the sm-live-restart task is gone, backlog item
+ closed), then ack.
+
+ Let me also check the primary home's secondmate
+ registry to confirm nothing routed. But the charter
+ says don't do primary home sweeps. Just my own home.
+
+ Let me ack the wake.
+

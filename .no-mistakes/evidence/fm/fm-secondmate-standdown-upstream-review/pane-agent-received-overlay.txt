@@ -1,0 +1,36 @@
+
+──────────────────────────────────────────────────────
+ Update Available
+ New version 1.4.0 is available. Run pi update
+ Changelog: https://pi.dev/changelog
+──────────────────────────────────────────────────────
+
+
+ FIRSTMATE_OP: v1 launch-brief: You are a secondmate,
+ not the primary Firstmate. Your home is
+ /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000
+ gn/T/fm-secondmate.qDa1yH. Your charter is
+ /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000
+ gn/T/fm-secondmate.qDa1yH/data/charter.md.
+ CHARTER: present at
+ /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000
+ gn/T/fm-secondmate.qDa1yH/data/charter.md (this home
+ own copy).
+ Run startup only for your own home:
+ bin/fm-session-start.sh in your home takes your own
+ home session lock and reconciles your own home
+ durable records from disk, and your own watcher arms
+ once that lock is held.
+ Never run startup against the primary home, never
+ take the primary home helm, never run the primary
+ home mutating fleet sweeps, and never address the
+ captain; report only through your parent Firstmate.
+
+ You are a persistent second mate managed by the main
+ firstmate. Work on your own; do not wait for a
+ human.
+
+ Charter
+
+ Own the disposable overlay delivery check end to
+ end.

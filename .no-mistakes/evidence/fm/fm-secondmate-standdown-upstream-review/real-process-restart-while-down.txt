@@ -1,0 +1,6 @@
+== while down (no startup has run)
+lock=76931
+lock: stale (pid 76931 dead or not a harness)
+pending_close=present
+backlog_row=in_flight
+wake=1792784988	1	signal	sm-live-restart	done: reconciled after the real process restart

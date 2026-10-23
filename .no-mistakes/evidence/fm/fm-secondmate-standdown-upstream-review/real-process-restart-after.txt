@@ -1,0 +1,17 @@
+== after the real process restart (respawned secondmate)
+old_lock_pid=76931 (dead)
+new_lock=99304
+new_complete=99304
+new_complete_mtime=1792785005
+lock: held by live harness pid 99304
+pending_close_marker=absent
+backlog_row_sm-restart-proof=done
+wake_queue_bytes=       0
+99304 pi
+== supervision path in the restarted home (observed live, before cleanup)
+ps: 72536 bash <secondmate home>/bin/fm-watch.sh   (its own watcher running)
+state/.watch.lock                  present
+state/.last-heartbeat              present
+state/.watcher-down                present
+state/.watch-cycle-exits.log       present
+state/terminal-outcomes/           present

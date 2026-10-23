@@ -1,0 +1,30 @@
+== cycle 2: before restart (live session readings)
+lock=54830
+complete=54830
+complete_mtime=1792784774
+lock: held by live harness pid 54830
+
+== restart residue: nothing has run startup yet
+dead_pid=47119
+lock=47119
+lock: stale (pid 47119 dead or not a harness)
+pending_close_present=yes
+backlog_row=in_flight
+new_wake_queued=1792784799	3	signal	sm-restart2	done: reconciled after second restart
+nudge=
+
+== restarting: new startup process
+exit=0
+SECOND MATE STARTUP - /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-secondmate.UfivVB
+lock acquired: harness pid 54830
+BOOTSTRAP_INFO: closed the backlog item for child-after2 that an interrupted cleanup left open
+1792784799	3	signal	sm-restart2	done: reconciled after second restart
+
+== after restart (new readings)
+lock=54830
+complete=54830
+complete_mtime=1792784802
+lock: held by live harness pid 54830
+pending_close_present=no
+backlog_row=done
+nudge_after_startup=0 lines

@@ -1,0 +1,3 @@
+BEFORE lock=76931 complete=76931 mtime=1792784937
+lock: held by live harness pid 76931
+76931 pi
