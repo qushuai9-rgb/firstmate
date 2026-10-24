@@ -1,0 +1,7 @@
+== bin/fm-test-run.sh --list --lane portable-serial | grep fm-pi-trust
+tests/fm-pi-trust-live-e2e.test.sh
+tests/fm-pi-trust.test.sh
+== portable-serial-3of9
+tests/fm-pi-trust.test.sh
+== portable-serial-4of9
+tests/fm-pi-trust-live-e2e.test.sh

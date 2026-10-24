@@ -1,0 +1,39 @@
+=== 1. exact recorded decline must refuse and not be reversed ===
+exit=1
+error: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/agent/trust.json records "Do not trust" for /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/slot, which Pi applies to /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/slot; refusing to reverse a decision the operator already made. Change or remove the /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/slot entry in /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/agent/trust.json to allow this spawn
+error: refusing to pre-register Pi trust: could not record trust for '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/slot' in '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/agent/trust.json'
+PASS declined-exact: refused, store untouched
+=== 2. inherited decline above the worktree must refuse too ===
+exit=1
+error: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/agent/trust.json records "Do not trust" for /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb, which Pi applies to /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/slot; refusing to reverse a decision the operator already made. Change or remove the /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb entry in /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/agent/trust.json to allow this spawn
+error: refusing to pre-register Pi trust: could not record trust for '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/slot' in '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/agent/trust.json'
+PASS declined-inherited: refused, store untouched
+=== 3. inherited trust must write nothing (idempotent across relaunch) ===
+exit=0
+already trusted: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/slot
+PASS inherited-true: already trusted, no write
+{
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb": true,
+  "/another": null
+}
+=== 4. fresh registration preserves unrelated entries and adds only the path ===
+exit=0
+trusted: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/slot
+{
+  "/keep/false": false,
+  "/keep/null": null,
+  "/keep/true": true,
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/slot": true
+}
+PASS preserve-and-add-one
+=== 5. out-of-scope operands are refused with a reason and no write ===
+primary checkout         exit=1 untouched=yes msg=error: refusing to pre-register Pi trust: '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/project' is a primary checkout, not an isolated worktree
+worktree subdirectory    exit=1 untouched=yes msg=error: refusing to pre-register Pi trust: '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/slot/sub' is not a worktree root (its root is '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/slot')
+plain directory          exit=1 untouched=yes msg=error: refusing to pre-register Pi trust: '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/plain' is not inside a git repository
+home directory           exit=1 untouched=yes msg=error: refusing to pre-register Pi trust: '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/home' is the home directory, not a task worktree
+filesystem root          exit=1 msg=error: refusing to pre-register Pi trust: '/' is the filesystem root, not a task worktree
+project=/                exit=1 msg=error: refusing to pre-register Pi trust: project '/' is not inside a git repository
+=== 6. malformed store must refuse loudly, not rewrite ===
+exit=1 untouched=yes
+error: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/agent/trust.json is not a JSON object
+error: refusing to pre-register Pi trust: could not record trust for '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/slot' in '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-trust-adv.YZ2XGb/agent/trust.json'

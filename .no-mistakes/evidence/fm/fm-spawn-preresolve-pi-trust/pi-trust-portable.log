@@ -1,0 +1,19 @@
+ok - a fresh task worktree is registered in Pi's own trust store
+ok - registration records the canonical worktree path Pi itself would key on
+ok - an existing registration is idempotent and leaves every other entry untouched
+ok - a new registration preserves every existing trust entry
+ok - a recorded 'Do not trust' decision refuses the spawn instead of being reversed
+ok - a trusted ancestor counts as already trusted and writes nothing
+ok - an undecided ancestor entry is skipped and the nearest recorded decision wins
+ok - an inherited 'Do not trust' refuses the spawn instead of being overridden
+ok - an unwritable store fails loudly and leaves nothing behind
+ok - a malformed store fails loudly instead of being rewritten
+ok - a non-boolean trust value fails loudly instead of being silently rewritten
+ok - primary checkouts, subdirectories, plain directories, unrelated worktrees, home, /, and relative roots are refused
+ok - the store root follows the pinned agent dir and else ~/.pi/agent, never the invoking environment
+ok - pi ship spawn registers its worktree before launch
+ok - pi-signed ship spawn registers its worktree before launch
+ok - an unpinned pi spawn registers Pi's default store even when the spawn environment names another root
+ok - a failed registration stops the spawn with a named error
+ok - a non-Pi harness leaves Pi's trust store untouched
+# all fm-pi-trust tests passed

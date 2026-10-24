@@ -1,0 +1,6 @@
+secondmate-spawn-exit=0
+warning: secondmate live-sm sync skipped before launch: primary default-branch commit cannot be resolved
+spawned live-sm harness=pi kind=secondmate mode=secondmate yolo=off window=firstmate:fm-live-sm worktree=/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-sm.7oLAIy/secondmate-home
+launch-has-session-approve=yes
+default-store-exists=no
+secondmate-store-exists=no

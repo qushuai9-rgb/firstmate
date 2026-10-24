@@ -1,0 +1,11 @@
+pinned-spawn-exit=0
+spawned live-pin harness=pi kind=ship mode=no-mistakes yolo=off window=firstmate:fm-live-pin worktree=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-live-pin.tJY9RC/wt account=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-live-pin.tJY9RC/pi-work account_provider=commandcode
+--- pinned store (/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-live-pin.tJY9RC/pi-work/trust.json) ---
+{
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-pin.tJY9RC/wt": true
+}
+--- default store present? ---
+no (correct)
+--- launch line names the pinned root? ---
+PI_CODING_AGENT_DIR='/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-live-pin.tJY9RC/pi-work'
+PASS pinned-root-trust

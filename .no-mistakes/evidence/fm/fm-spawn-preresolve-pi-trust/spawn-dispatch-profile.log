@@ -10,6 +10,9 @@ ok - inaccessible ancestor with absent allowlist refuses before launch or task p
 ok - secondmate launch inherits the allowlist for subsequent worker launches
 ok - local inheritance preserves the allowlist on source errors and mirrors proven absence
 ok - remote inheritance preserves the allowlist on source errors and mirrors proven absence
+ok - Codex absent, bypass, and restricted modes preserve flags for ships, scouts, and secondmates
+ok - invalid Codex permission files refuse spawns and relaunches before mutation
+ok - Codex restricted mode leaves other harness launch flags unchanged
 WORKER-RAN
 WORKER-RAN
 WORKER-RAN
@@ -38,18 +41,30 @@ ok - claude receives --model and --effort profile flags
 ok - codex receives --model and model_reasoning_effort profile flags
 ok - codex Luna receives --model and model_reasoning_effort max profile flags
 ok - codex omits max for models without the catalog capability
-ok - a codex crewmate launches with no hook layer and keeps its turn-end signal
-ok - a codex secondmate keeps the project hook layer its primary session runs on
+ok - a codex crewmate requests no hook layer and keeps its turn-end signal
+ok - a codex secondmate keeps its project hooks and uses automatic approval review
+ok - Codex defaults remain bypass; persistent fallback is direct and invalid values refuse
 ok - grok receives --model and --reasoning-effort profile flags
 ok - grok omits unsupported max reasoning effort
 ok - grok omits unsupported xhigh reasoning effort
 ok - cursor receives its model-qualified reasoning class and exact task workspace
 ok - cursor refuses model ids absent from its resolved binary's live catalog
 ok - cursor preserves the requested model when its live catalog is unreachable
-ok - opencode receives --model and the effort as its config's agent variant
-ok - opencode without an effort keeps its launch config unchanged
+ok - opencode receives the model and effort through its config
+ok - opencode without an effort keeps the model pin and omits variant
 ok - opencode emits the variant for an effort the openai family exposes
 ok - opencode omits the variant for an effort outside the model family's list
+ok - opencode 1.x keeps the --model flag and the variant-only config
+ok - opencode 1.x without an effort keeps its permission-only launch config
+ok - opencode probe and launch share the same resolved executable path
+ok - opencode with an unparseable version falls back to the 1.x launch path
+ok - opencode 2 delivery gate accepts an auto-submitted brief without pressing Enter
+ok - opencode 2 delivery gate sends exactly one Enter for a brief left in the composer
+ok - opencode 2 delivery gate keeps polling an unknown composer and sends one Enter once it reads pending
+ok - opencode 2 delivery gate sends its one Enter at the deadline when the composer only reads unknown
+ok - opencode 2 delivery gate fails the spawn when the brief turn never starts
+ok - opencode 1.x launches keep their pre-gate delivery
+ok - opencode provisions a busy-state plugin for every detected major, including the 1.x fallback
 ok - native effort validator checks harness and model as separate axes
 ok - Ultra is explicit for native Pi and Pi-signed, including direct-PR, and refuses unsupported profiles before provisioning
 ok - batch dispatch preserves native Ultra in metadata and launch flags
@@ -72,11 +87,12 @@ ok - exclusions stay in the home that configured them and skip secondmate agents
 ok - batch dispatch forwards shared --harness, --model, and --effort to every pair
 ok - claude forwards firstmate's CLAUDE_CONFIG_DIR so the crewmate uses the same credential store
 ok - the primary-owned Lavish server address reaches every worker launch
-cat: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-spawn-dispatch-profile.jLGDmy/profile-lavish-ambient/pane.log: No such file or directory
+cat: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-spawn-dispatch-profile.yrCok2/profile-lavish-ambient/pane.log: No such file or directory
 ok - absent Lavish configuration preserves the destination environment
 ok - claude omits the config-dir prefix when firstmate runs with the single-store default
-ok - config/claude-permission-mode=bypass launches exactly as an absent file does
-ok - config/claude-permission-mode=auto replaces --dangerously-skip-permissions with --permission-mode auto
+ok - absent config/claude-permission-mode defaults to --dangerously-skip-permissions
+ok - config/claude-permission-mode=auto opts into the model-reviewed launch
+ok - explicit config/claude-permission-mode=bypass uses --dangerously-skip-permissions
 ok - config/claude-permission-mode=auto reaches scout launches too
 ok - claude worker launches cover the task-channel directories in bypass and auto modes
 ok - an unrecognized config/claude-permission-mode token refuses before any endpoint or metadata

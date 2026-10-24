@@ -1,0 +1,15 @@
+case=malformed spawn-exit=1 store-untouched=yes
+error: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-refuse.SgseWu/home/user-home/.pi/agent/trust.json is not a JSON object
+error: refusing to pre-register Pi trust: could not record trust for '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-refuse.SgseWu/wt' in '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-refuse.SgseWu/home/user-home/.pi/agent/trust.json'
+error: could not pre-register Pi project trust for /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-live-refuse.SgseWu/wt; refusing to launch a pi worker that would wedge on the trust dialog; inspect window firstmate:fm-live-refuse
+/Users/qushuai9/.no-mistakes/evidence/01M5PFKWK88267WQH0FWDJYA5K/live-spawn-refuse.sh: line 47: /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-live-refuse.SgseWu/launch.log: No such file or directory
+launch-log-bytes=0
+meta-exists=no
+----
+case=declined spawn-exit=1 store-untouched=yes
+error: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-refuse.LvCFoE/home/user-home/.pi/agent/trust.json records "Do not trust" for /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-refuse.LvCFoE, which Pi applies to /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-refuse.LvCFoE/wt; refusing to reverse a decision the operator already made. Change or remove the /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-refuse.LvCFoE entry in /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-refuse.LvCFoE/home/user-home/.pi/agent/trust.json to allow this spawn
+error: refusing to pre-register Pi trust: could not record trust for '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-refuse.LvCFoE/wt' in '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-live-refuse.LvCFoE/home/user-home/.pi/agent/trust.json'
+error: could not pre-register Pi project trust for /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-live-refuse.LvCFoE/wt; refusing to launch a pi worker that would wedge on the trust dialog; inspect window firstmate:fm-live-refuse
+/Users/qushuai9/.no-mistakes/evidence/01M5PFKWK88267WQH0FWDJYA5K/live-spawn-refuse.sh: line 47: /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-live-refuse.LvCFoE/launch.log: No such file or directory
+launch-log-bytes=0
+meta-exists=no

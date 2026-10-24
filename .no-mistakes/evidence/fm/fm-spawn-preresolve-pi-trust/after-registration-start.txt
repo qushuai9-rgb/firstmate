@@ -1,0 +1,39 @@
+[>7u
+ pi v0.84.2                                                                                                                                 
+ escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash · ctrl+o more                                                            
+ Press ctrl+o to show full startup help and loaded resources.                                                                               
+                                                                                                                                            
+ Pi can explain its own features and look up its docs. Ask it how to use or extend Pi.                                                      
+
+[Skills]                                                                                                                                    
+  autoresearch-create, autoresearch-finalize, autoresearch-hooks                                                                            
+
+[Extensions]                                                                                                                                
+  pi-autoresearch:pi-autoresearch, pi-wechat-assistant                                                                                      
+
+[Skill conflicts]                                                                                                                           
+  /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.M21NAD/slot/.agents/skills/demo/SKILL.md                              
+    description is required                                                                                                                 
+
+                                                                                                                                            
+ Reply with exactly READY and nothing else.                                                                                                 
+                                                                                                                                            
+
+ ⠋ Working...                                                                                                                               
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                                                            
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.M21NAD/slot (slot)
+0.0%/1.0M (auto)                                                                           (commandcode) deepseek/deepseek-v4.1-flash • high
+ ⠙ Working...                                                                                                                                ⠹ Working...                                                                                                                                ⠸ Working...                                                                                                                                ⠼ Working...                                                                                                                                ⠴ Working...                                                                                                                                ⠦ Working...                                                                                                                                ⠧ Working...                                                                                                                                ⠇ Working...                                                                                                                                ⠏ Working...                                                                                                                                ⠋ Working...                                                                                                                                ⠙ Working...                                                                                                                               ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Update Available                                                                                                                           
+[... TUI repaint frames omitted; pi started its turn with no dialog ...]
+
+ Pi can explain its own features and look up its docs. Ask it how to use or extend Pi.
+
+ Reply with exactly READY and nothing else.
+
+ ⠋ Working...
+
+ READY
