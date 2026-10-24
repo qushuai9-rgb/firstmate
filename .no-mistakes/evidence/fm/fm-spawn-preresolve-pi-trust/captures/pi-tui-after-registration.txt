@@ -1,0 +1,38 @@
+[>7u
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.EfqxWF/slot (slot)
+0.0%/0 (auto)                                                                                                    unknown pi v0.84.2                                                                                                             
+ escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash · ctrl+o more                                        
+ Press ctrl+o to show full startup help and loaded resources.                                                           
+                                                                                                                        
+ Pi can explain its own features and look up its docs. Ask it how to use or extend Pi.                                  
+
+[Skills]                                                                                                                
+  demo                                                                                                                  
+
+
+ Warning: No models available. Use /login to log into a provider via OAuth or API key. See:                             
+                                                                                                                        
+ /Users/qushuai9/.local/share/pi-node/node-v22.23.2-darwin-arm64/lib/node_modules/@earendil-works/pi-coding-agent/docs/ 
+ providers.md                                                                                                           
+                                                                                                                        
+ /Users/qushuai9/.local/share/pi-node/node-v22.23.2-darwin-arm64/lib/node_modules/@earendil-works/pi-coding-agent/docs/ 
+ models.md                                                                                                              
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.EfqxWF/slot (slot)
+0.0%/0 (auto)                                                                                                    unknown────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Update Available                                                                                                       
+ New version 1.4.0 is available. Run pi update                                                                          
+ Changelog: https://pi.dev/changelog                                                                                    
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.EfqxWF/slot (slot)
+0.0%/0 (auto)                                                                                                    unknown
