@@ -1,0 +1,12 @@
+seeded store: /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.Y8G1qP/decline-exact/agent/trust.json
+{
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.Y8G1qP/slot3": false
+}
+
+$ bin/fm-pi-trust.sh --agent-dir /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.Y8G1qP/decline-exact/agent /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.Y8G1qP/slot3 /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.Y8G1qP/project   # exact decline
+error: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.Y8G1qP/decline-exact/agent/trust.json records "Do not trust" for /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.Y8G1qP/slot3, which Pi applies to /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.Y8G1qP/slot3; refusing to reverse a decision the operator already made. Change or remove the /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.Y8G1qP/slot3 entry in /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.Y8G1qP/decline-exact/agent/trust.json to allow this spawn
+error: refusing to pre-register Pi trust: could not record trust for '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.Y8G1qP/slot3' in '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.Y8G1qP/decline-exact/agent/trust.json'
+exit=1
+{
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.Y8G1qP/slot3": false
+}

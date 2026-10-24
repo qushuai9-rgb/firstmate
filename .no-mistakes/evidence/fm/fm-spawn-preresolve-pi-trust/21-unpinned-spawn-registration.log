@@ -1,0 +1,18 @@
+=== real bin/fm-spawn.sh unpinned pi crewmate spawn in a throwaway lab
+command: FM_FAKE_LAUNCH_LOG=<log> fm_test_run_spawn <lab fmhome> <lab slot> <fakebin> pi-live-check <lab project> --mode no-mistakes --yolo off
+spawn output:
+spawned pi-live-check harness=pi kind=ship mode=no-mistakes yolo=off window=firstmate:fm-pi-live-check worktree=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/slot
+spawn rc=0
+no project trust dialog: the worktree was registered before the pane existed
+
+--- real launch line emitted for the pane (env prefix only, truncated after the pi argument):
+export COMPACT_ADVISER_DISABLE=1; export FM_TASK_INBOX='/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/fmhome/state/pi-live-check.inbox'; '/Users/qushuai9/.no-mistakes/worktrees/be4d97686c7c/01M5Q7GQSH4NS7FYYDHC9JCQJQ/bin/fm-git-strip-ai-trailers.sh' env-file '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/fmhome/state/pi-live-check.git-hooks' '/tmp/fm-pi-live-check+c4c27424460956f0da7e23678ac42c5b6eec44fd77b79a654a04bf11098e8b6e/git-config.s1792861261.64971.26305.sh' && . '/tmp/fm-pi-live-check+c4c27424460956f0da7e23678ac42c5b6eec44fd77b79a654a04bf11098e8b6e/git-config.s1792861261.64971.26305.sh' || return 1 2>/dev/null || exit 1; env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI -u PI_CODING_AGENT_DIR FM_PI_HARNESS=pi '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/fake/fakebin/pi' -e '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/fmhome/state/pi-live-chec
+
+--- unpinned launch line unsets the ambient root: yes
+--- unpinned launch line carries no pinned assignment: yes
+
+--- store the launch reads, $HOME/.pi/agent/trust.json in the lab:
+{
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/slot": true
+}
+--- the slot path in that store is the realpath Pi keys on: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/slot

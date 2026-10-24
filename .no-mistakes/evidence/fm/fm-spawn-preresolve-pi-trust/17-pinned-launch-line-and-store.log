@@ -1,0 +1,18 @@
+=== pinned crewmate spawn: config/pi-account root=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/pinroot, providers='anthropic'
+spawn command: FM_FAKE_LAUNCH_LOG=<log> fm_test_run_spawn <pinhome> <slot> <fakebin> pi-pinned-check <project> --mode no-mistakes --yolo off --model anthropic/claude-x
+spawn output tail:
+spawned pi-pinned-check harness=pi kind=ship mode=no-mistakes yolo=off window=firstmate:fm-pi-pinned-check worktree=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/slot account=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/pinroot account_provider=anthropic
+spawn rc=0
+
+--- real fm-spawn.sh launch line (full line, wraps here):
+export COMPACT_ADVISER_DISABLE=1; export FM_TASK_INBOX='/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/pinhome/state/pi-pinned-check.inbox'; '/Users/qushuai9/.no-mistakes/worktrees/be4d97686c7c/01M5Q7GQSH4NS7FYYDHC9JCQJQ/bin/fm-git-strip-ai-trailers.sh' env-file '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/pinhome/state/pi-pinned-check.git-hooks' '/tmp/fm-pi-pinned-check+3cccabc6fe8f144ecf59e5d8fbf5d2c6c56b5ba2f2930fb3d632e79a09dbf00a/git-config.s1792862128.15392.4261.sh' && . '/tmp/fm-pi-pinned-check+3cccabc6fe8f144ecf59e5d8fbf5d2c6c56b5ba2f2930fb3d632e79a09dbf00a/git-config.s1792862128.15392.4261.sh' || return 1 2>/dev/null || exit 1; PI_CODING_AGENT_DIR='/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/pinroot' env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI FM_PI_HARNESS=pi '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/fake-pinned/fakebin/pi' --tui-mode regular --provider 'anthropic' --model 'anthropic/claude-x' -e '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/pinhome/state/pi-pinned-check.pi-ext.ts' "$('/Users/qushuai9/.no-mistakes/worktrees/be4d97686c7c/01M5Q7GQSH4NS7FYYDHC9JCQJQ/bin/fm-operational-input.sh' encode launch-brief < '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/pinhome/data/pi-pinned-check/launch-brief.md')"
+
+--- pin assignment present on the launch line: yes
+--- '-u PI_CODING_AGENT_DIR' present (must be absent for a pinned launch): no
+
+--- pinned trust store /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/pinroot/trust.json:
+{
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/slot": true
+}
+
+--- worker default store /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/pinhome/user-home/.pi/agent/trust.json: absent (the pin, not the default root, is the store)

@@ -1,0 +1,7 @@
+$ HOME=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.Y8G1qP/home bin/fm-pi-trust.sh /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.Y8G1qP/slot /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.Y8G1qP/project
+trusted: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.Y8G1qP/slot
+exit=0
+--- /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.Y8G1qP/home/.pi/agent/trust.json
+{
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.Y8G1qP/slot": true
+}

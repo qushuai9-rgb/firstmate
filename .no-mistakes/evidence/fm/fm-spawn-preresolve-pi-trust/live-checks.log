@@ -1,0 +1,60 @@
+=== pinned store registration: fm-pi-trust.sh --agent-dir /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/pinned-agent /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/slot /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/project
+trusted: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/slot
+exit=0
+--- pinned store /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/pinned-agent/trust.json
+{
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/slot": true
+}
+--- default store /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/home3/.pi/agent/trust.json
+(absent, so the pinned entry cannot cover a default-root launch)
+
+=== inherited 'Do not trust' refusal
+seeded: {
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3": false
+}
+error: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/decline-agent/trust.json records "Do not trust" for /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3, which Pi applies to /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/slot; refusing to reverse a decision the operator already made. Change or remove the /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3 entry in /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/decline-agent/trust.json to allow this spawn
+error: refusing to pre-register Pi trust: could not record trust for '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/slot' in '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/decline-agent/trust.json'
+exit=1
+store sha256 before=71454464b386dc3e13cf587f6766f21caa67009dccb3a97e968c92626763c491
+store sha256 after =71454464b386dc3e13cf587f6766f21caa67009dccb3a97e968c92626763c491
+store after: {
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3": false
+}
+
+=== scope refusals (must all exit non-zero and write nothing)
+--- subdirectory: fm-pi-trust.sh /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/slot/sub /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/project
+error: refusing to pre-register Pi trust: '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/slot/sub' is not a worktree root (its root is '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/slot')
+exit=1
+--- primary-checkout: fm-pi-trust.sh /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/project /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/project
+error: refusing to pre-register Pi trust: '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/project' is a primary checkout, not an isolated worktree
+exit=1
+--- home-directory: fm-pi-trust.sh /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/home3 /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/project
+error: refusing to pre-register Pi trust: '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/home3' is the home directory, not a task worktree
+exit=1
+--- filesystem-root: fm-pi-trust.sh / /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/project
+error: refusing to pre-register Pi trust: '/' is the filesystem root, not a task worktree
+exit=1
+--- plain-directory: fm-pi-trust.sh /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/plain-dir /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/project
+error: refusing to pre-register Pi trust: '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/plain-dir' is not inside a git repository
+exit=1
+--- unrelated-worktree: fm-pi-trust.sh /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/other-wt /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.kWp4I3/project
+error: refusing to pre-register Pi trust: '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/other-wt' is not a worktree of project '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/project'
+exit=1
+
+=== idempotency and unrelated entry preservation
+--- first registration
+trusted: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/slot
+exit=0
+{
+  "/private/unrelated/path": true,
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/slot": true
+}
+--- second registration
+already trusted: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/slot
+exit=0
+{
+  "/private/unrelated/path": true,
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.kWp4I3/slot": true
+}
+sha before=0d358945b99cb5f49ab65454f40c3624b5feb1da369e0d1f44cf78a18802a384  -
+sha after =0d358945b99cb5f49ab65454f40c3624b5feb1da369e0d1f44cf78a18802a384  -

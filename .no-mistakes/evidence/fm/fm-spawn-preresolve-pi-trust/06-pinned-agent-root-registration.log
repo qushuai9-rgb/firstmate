@@ -1,0 +1,11 @@
+$ HOME=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.Y8G1qP/home bin/fm-pi-trust.sh --agent-dir /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.Y8G1qP/pinned/agent /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.Y8G1qP/slot2 /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.Y8G1qP/project
+trusted: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.Y8G1qP/slot2
+exit=0
+--- pinned store
+{
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.Y8G1qP/slot2": true
+}
+--- default store
+{
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.Y8G1qP/slot": true
+}

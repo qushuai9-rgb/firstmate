@@ -1,0 +1,10 @@
+$ HOME=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.Y8G1qP/home bin/fm-pi-trust.sh /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.Y8G1qP/slot /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.Y8G1qP/project   # second registration
+already trusted: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.Y8G1qP/slot
+exit=0
+store sha256 before: eb981d558e161c2a09fc89b7f8e7581e42b5acda5045bdb6d82427b6c272ebed
+store sha256 after:  eb981d558e161c2a09fc89b7f8e7581e42b5acda5045bdb6d82427b6c272ebed
+store stat before: 1792858462 94
+store stat after:  1792858462 94
+{
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.Y8G1qP/slot": true
+}

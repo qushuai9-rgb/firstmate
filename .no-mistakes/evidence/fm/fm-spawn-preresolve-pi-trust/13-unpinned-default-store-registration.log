@@ -1,0 +1,9 @@
+$ HOME=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.Y8G1qP/home bin/fm-pi-trust.sh /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.Y8G1qP/slot4 /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-pi-live.Y8G1qP/project   # unpinned: default <home>/.pi/agent
+trusted: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.Y8G1qP/slot4
+exit=0
+--- default store
+{
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.Y8G1qP/slot": true,
+  "/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-live.Y8G1qP/slot4": true
+}
+--- ambient (pane-daemon) store the launch must not read
