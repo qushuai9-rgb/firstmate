@@ -1,0 +1,53 @@
+LAB=/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.wNeYbU
+MATE=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-mate.UNbDBd/sm-live-1
+== provisioning a real secondmate home from the tracked code root ==
+scaffolded: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.wNeYbU/data/sm-live-1/brief.md (secondmate charter)
+home=/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-mate.UNbDBd/sm-live-1
+marker: sm-live-1
+== seeding this home's own pending work before the first startup ==
+== FIRST STARTUP: real bin/fm-session-start.sh in the marked secondmate home ==
+first startup exit=0
+PASS: secondmate startup exit 0
+PASS: digest printed the marker-derived SECOND MATE STARTUP heading
+PASS: digest stated this home's own lock ownership
+PASS: digest acquired a session lock through fm-lock.sh
+PASS: digest drained this home's own queued wake
+PASS: digest replayed this home's own pending backlog close
+PASS: digest ran the fleet/disk reconciliation stage
+PASS: backlog row child-before is done after replay (row=done)
+PASS: replayed close marker removed
+readings before restart: lock=82857 complete=82857 mtime=1792813770
+PASS: completion record keyed to this home's lock holder
+PASS: deferred network stage published /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-mate.UNbDBd/sm-live-1/state/.startup-network.report
+report:
+  SECONDMATE_LIVENESS: secondmate sm-x: skipped: endpoint probe unreadable (backend=tmux)
+  SECONDMATE_SYNC: secondmate sm-x: skipped: unsafe home: not a directory
+PASS: deferred sweep converged this home's own secondmate record
+PASS: deferred sweep checked this home's own secondmate liveness
+PASS: primary home state/ and data/ unchanged by the secondmate startup
+== RESTART: a real restart leaves a dead lock owner behind ==
+wrote dead lock owner pid 99348 and queued fresh work while the home was down
+restart exit=0
+PASS: restarted secondmate startup exit 0
+PASS: restart drained the wake queued while it was down
+PASS: restart replayed the close its dead session left
+PASS: backlog row child-after is done after restart (row=done)
+PASS: restart close marker removed
+readings after restart: lock=82857 complete=82857 mtime=1792813774
+PASS: restart replaced the dead lock owner 99348 (new=82857)
+PASS: restart completion record keyed to the new lock holder
+PASS: completion record rewritten newer (1792813770 -> 1792813774)
+fm-lock.sh status: lock: held by live harness pid 82857
+PASS: fm-lock.sh reports the restarted lock held by a live harness pid
+PASS: primary home still unchanged after the restart cycle
+== POSTURE IS MARKER-DERIVED: an unmarked home and a symlinked marker are not secondmates ==
+PASS: an unmarked home still gets the ordinary SESSION START heading
+PASS: an unmarked home never claims the secondmate posture
+PASS: a symlinked identity marker does not spoof the secondmate posture
+== SESSION-OPEN HOOKS: a marked secondmate home is eligible, not stood down ==
+PASS: the nudge wrapper asks a secondmate whose lock is not held to run its startup
+PASS: the run wrapper executed this home's own startup
+PASS: the run wrapper took the secondmate home's own session lock (82857)
+PASS: the nudge stays silent once this home's lock is held by this session
+
+exit=0 (0 = every assertion above passed)

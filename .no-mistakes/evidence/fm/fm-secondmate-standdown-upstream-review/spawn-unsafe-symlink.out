@@ -1,0 +1,5 @@
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-spawnlab.fyfi9A/lab
+warning: secondmate sm-b sync skipped before launch: primary default-branch commit cannot be resolved
+/Users/qushuai9/.no-mistakes/worktrees/be4d97686c7c/01M5NYF3VY2N6WNEFK4K7M1Z8M/bin/backends/tmux.sh: line 97: tmux: command not found
+/Users/qushuai9/.no-mistakes/worktrees/be4d97686c7c/01M5NYF3VY2N6WNEFK4K7M1Z8M/bin/backends/tmux.sh: line 119: tmux: command not found
+/Users/qushuai9/.no-mistakes/worktrees/be4d97686c7c/01M5NYF3VY2N6WNEFK4K7M1Z8M/bin/backends/tmux.sh: line 123: tmux: command not found

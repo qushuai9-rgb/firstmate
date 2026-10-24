@@ -1,0 +1,72 @@
+root=/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-spawnlab.fyfi9A
+
+== S3: a seeded secondmate launch carries role, absolute home, own charter and boundaries ==
+launch exit=1 (harness CLI absent, so the pane step fails after the boundary)
+PASS: launch boundary wrote /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-spawnlab.fyfi9A/lab/data/sm-a/secondmate-launch-brief.md
+PASS: overlay states the role and the absolute home
+PASS: overlay names this home's own charter path
+PASS: overlay reports the home copy as present
+PASS: overlay names the own-home startup posture
+PASS: overlay forbids startup against the primary home
+PASS: overlay states the captain boundary
+PASS: overlay carries the home charter body
+PASS: the charter body follows the identity/boundary header (boundary line 4, body line 11)
+PASS: launch did not rewrite the home's charter
+
+== S4: an out-of-home charter symlink is reported UNSAFE and its bytes never reach the overlay ==
+PASS: launch boundary still wrote the overlay
+PASS: overlay names the symlinked charter UNSAFE
+PASS: out-of-home charter bytes never reached the overlay
+PASS: overlay labels the parent copy as an explicit fallback
+PASS: overlay still carries the labelled fallback text
+
+== S4b: a data/ directory symlink that leaves the home is also UNSAFE ==
+PASS: a data/ symlink leaving the home refuses the launch (exit 1)
+PASS: the refusal names the escaping data directory
+PASS: no overlay was produced for the escaping data dir
+PASS: out-of-home data-dir charter bytes never reached any overlay
+
+== S5: no home charter and no parent copy refuses before any endpoint, metadata or record ==
+refusal exit=1
+PASS: launch refused (exit 1)
+PASS: refusal names the missing charter
+PASS: refusal names the home's own charter path
+PASS: refusal names the absent parent copy
+PASS: refusal names the seeding fix
+PASS: no overlay was created by the refusal
+PASS: no task metadata was created by the refusal
+PASS: primary state dir stayed empty
+PASS: no launch record was created in the mate's state
+
+== S6: a missing home charter with the parent copy present recovers with an explicit MISSING verdict ==
+PASS: overlay names the missing home charter
+PASS: overlay forbids inferring a role from AGENTS.md
+PASS: parent copy labelled as an explicit fallback
+PASS: recovering session still receives the parent copy
+PASS: overlay never claims a present home copy
+
+===== generated overlays =====
+--- data/sm-a/secondmate-launch-brief.md
+You are a secondmate, not the primary Firstmate. Your home is /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-spawnlab.fyfi9A/mates/sm-a. Your charter is /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-spawnlab.fyfi9A/mates/sm-a/data/charter.md.
+CHARTER: present at /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-spawnlab.fyfi9A/mates/sm-a/data/charter.md (this home own copy).
+Run startup only for your own home: bin/fm-session-start.sh in your home takes your own home session lock and reconciles your own home durable records from disk, and your own watcher arms once that lock is held.
+Never run startup against the primary home, never take the primary home helm, never run the primary home mutating fleet sweeps, and never address the captain; report only through your parent Firstmate.
+
+You are a persistent second mate managed by the main firstmate. Work on your own; do not wait for a human.
+--- data/sm-b/secondmate-launch-brief.md
+You are a secondmate, not the primary Firstmate. Your home is /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-spawnlab.fyfi9A/mates/sm-b. Your charter is /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-spawnlab.fyfi9A/mates/sm-b/data/charter.md.
+CHARTER: UNSAFE at /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-spawnlab.fyfi9A/mates/sm-b/data/charter.md: it is a symlink or does not resolve inside this home. Do NOT read it, do NOT infer any role from AGENTS.md, and do NOT run startup as the primary home; report the unsafe charter to your parent Firstmate and wait for it to be seeded.
+
+Run startup only for your own home: bin/fm-session-start.sh in your home takes your own home session lock and reconciles your own home durable records from disk, and your own watcher arms once that lock is held.
+Never run startup against the primary home, never take the primary home helm, never run the primary home mutating fleet sweeps, and never address the captain; report only through your parent Firstmate.
+
+--- data/sm-b2/secondmate-launch-brief.md
+--- data/sm-d/secondmate-launch-brief.md
+You are a secondmate, not the primary Firstmate. Your home is /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-spawnlab.fyfi9A/mates/sm-d. Your charter is /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-spawnlab.fyfi9A/mates/sm-d/data/charter.md.
+CHARTER: MISSING at /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-spawnlab.fyfi9A/mates/sm-d/data/charter.md. Do NOT infer any role from AGENTS.md and do NOT run startup as the primary home; report the missing charter to your parent Firstmate and wait for it to be seeded.
+
+Run startup only for your own home: bin/fm-session-start.sh in your home takes your own home session lock and reconciles your own home durable records from disk, and your own watcher arms once that lock is held.
+Never run startup against the primary home, never take the primary home helm, never run the primary home mutating fleet sweeps, and never address the captain; report only through your parent Firstmate.
+
+
+exit=0 (0 = every assertion above passed)
