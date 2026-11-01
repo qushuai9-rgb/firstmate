@@ -1,0 +1,95 @@
+=== scenario: answer-after-retain
+=== lab home: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.GB4z1a
+=== recorded pr: https://github.com/cli/cli/pull/14846
+=== real forge now reports: OPEN mergedAt=none
+=== backlog row before teardown
+task:
+  id: task-x1
+  title: "Ship the sample live delivery https://github.com/cli/cli/pull/14846"
+  state: in_flight
+  blocked: no
+  blocked_by: none
+  held: yes
+  hold_reason: captain merge approval pending
+  hold_kind: captain
+  hold_until: "-"
+  kind: ship
+  repo: "-"
+  priority: "-"
+  created: 2026-11-02
+  closed: "-"
+  deps: none
+  links: "pr:https://github.com/cli/cli/pull/14846"
+  body: ""
+=== running the real teardown
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 5s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair a missing or failed watcher cycle with the Pi tool fm_watch_arm_pi, or restart Pi with -e /Users/qushuai9/.no-mistakes/worktrees/be4d97686c7c/01M6BX7AK8EB4456CGTMGQ3RCB/.pi/extensions/fm-primary-turnend-guard.ts -e /Users/qushuai9/.no-mistakes/worktrees/be4d97686c7c/01M6BX7AK8EB4456CGTMGQ3RCB/.pi/extensions/fm-primary-pi-watch.ts if the extensions are not loaded.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+sample: already current
+teardown task-x1 complete (window firstmate:fm-task-x1, worktree /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.GB4z1a/projects/task-x1)
+Backlog: task-x1 stays open in /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.GB4z1a/data/backlog.md, still held for the captain with its deliverable recorded. Relay the question and close it only with bin/fm-captain-hold.sh answer.
+=== teardown exit: 0
+=== backlog row after the retention
+task:
+  id: task-x1
+  title: Ship the sample live delivery
+  state: queued
+  blocked: no
+  blocked_by: none
+  held: yes
+  hold_reason: captain merge approval pending
+  hold_kind: captain
+  hold_until: "-"
+  kind: ship
+  repo: "-"
+  priority: "-"
+  created: 2026-11-02
+  closed: "-"
+  deps: none
+  links: none
+  body: "Deliverable of the finished work: Delivered, merge not confirmed because it was still open when this finished: https://github.com/cli/cli/pull/14846. The link is a historical record whose merge was not verified in this run"
+=== running the real captain answer
+answered: task-x1
+=== answer exit: 0
+=== backlog row after
+task:
+  id: task-x1
+  title: Ship the sample live delivery
+  state: done
+  blocked: no
+  blocked_by: none
+  held: no
+  hold_reason: captain merge approval pending
+  hold_kind: captain
+  hold_until: "-"
+  kind: ship
+  repo: "-"
+  priority: "-"
+  created: "-"
+  closed: 2026-11-02
+  deps: none
+  links: none
+  body: "Resolution recorded by fm-captain-hold.\nDecision digest: c495037950f8760ff5b885a74273c4cdddb2493a0548f1f55f5d2c6f09029322\nResolution mode: answered\n\nCaptain decision:\nDo not merge this pull request yet; the work is delivered and awaits its merge.\n\nDeliverable of the finished work: Delivered, merge not confirmed because it was still open when this finished: https://github.com/cli/cli/pull/14846. The link is a historical record whose merge was not verified in this run"
+=== raw backlog.md
+# Backlog
+
+## In flight
+## Queued
+## Done
+- [x] task-x1 - Ship the sample live delivery (kind: ship) (done 2026-11-02) (hold: captain merge approval pending) (hold-kind: captain)
+  Resolution recorded by fm-captain-hold.
+  Decision digest: c495037950f8760ff5b885a74273c4cdddb2493a0548f1f55f5d2c6f09029322
+  Resolution mode: answered
+
+  Captain decision:
+  Do not merge this pull request yet; the work is delivered and awaits its merge.
+
+  Deliverable of the finished work: Delivered, merge not confirmed because it was still open when this finished: https://github.com/cli/cli/pull/14846. The link is a historical record whose merge was not verified in this run
+=== merge-verification record
+(none)
+=== pending-close record
+(none)

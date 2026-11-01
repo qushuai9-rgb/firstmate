@@ -1,0 +1,66 @@
+=== scenario: retain-open
+=== lab home: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.MtTWfU
+=== recorded pr: https://github.com/cli/cli/pull/14846
+=== real forge now reports: OPEN mergedAt=none
+=== backlog row before teardown
+task:
+  id: task-x1
+  title: "Ship the sample live delivery https://github.com/cli/cli/pull/14846"
+  state: in_flight
+  blocked: no
+  blocked_by: none
+  held: yes
+  hold_reason: captain merge approval pending
+  hold_kind: captain
+  hold_until: "-"
+  kind: ship
+  repo: "-"
+  priority: "-"
+  created: 2026-11-02
+  closed: "-"
+  deps: none
+  links: "pr:https://github.com/cli/cli/pull/14846"
+  body: ""
+=== running the real teardown
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 5s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair a missing or failed watcher cycle with the Pi tool fm_watch_arm_pi, or restart Pi with -e /Users/qushuai9/.no-mistakes/worktrees/be4d97686c7c/01M6BX7AK8EB4456CGTMGQ3RCB/.pi/extensions/fm-primary-turnend-guard.ts -e /Users/qushuai9/.no-mistakes/worktrees/be4d97686c7c/01M6BX7AK8EB4456CGTMGQ3RCB/.pi/extensions/fm-primary-pi-watch.ts if the extensions are not loaded.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+sample: already current
+teardown task-x1 complete (window firstmate:fm-task-x1, worktree /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.MtTWfU/projects/task-x1)
+Backlog: task-x1 stays open in /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.MtTWfU/data/backlog.md, still held for the captain with its deliverable recorded. Relay the question and close it only with bin/fm-captain-hold.sh answer.
+=== teardown exit: 0
+=== backlog row after
+task:
+  id: task-x1
+  title: Ship the sample live delivery
+  state: queued
+  blocked: no
+  blocked_by: none
+  held: yes
+  hold_reason: captain merge approval pending
+  hold_kind: captain
+  hold_until: "-"
+  kind: ship
+  repo: "-"
+  priority: "-"
+  created: 2026-11-02
+  closed: "-"
+  deps: none
+  links: none
+  body: "Deliverable of the finished work: Delivered, merge not confirmed because it was still open when this finished: https://github.com/cli/cli/pull/14846. The link is a historical record whose merge was not verified in this run"
+=== raw backlog.md
+# Backlog
+
+## In flight
+## Queued
+- [ ] task-x1 - Ship the sample live delivery (kind: ship) (since 2026-11-02) (hold: captain merge approval pending) (hold-kind: captain)
+  Deliverable of the finished work: Delivered, merge not confirmed because it was still open when this finished: https://github.com/cli/cli/pull/14846. The link is a historical record whose merge was not verified in this run
+## Done
+=== merge-verification record
+(none)
+=== pending-close record
+(none)
