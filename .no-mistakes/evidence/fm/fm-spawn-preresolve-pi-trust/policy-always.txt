@@ -1,0 +1,4 @@
+=== policy always ===
+fm-pi-trust: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab-spawn.dINvQl/agent-always/settings.json sets defaultProjectTrust to "always", so Pi already trusts /Users/qushuai9/.treehouse/project-9298e4/1/project and nothing was written
+exit=0
+settings.json

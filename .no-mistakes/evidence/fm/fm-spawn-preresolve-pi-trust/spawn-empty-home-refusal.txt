@@ -1,0 +1,11 @@
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab-spawn.dINvQl
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 116s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair a missing or failed watcher cycle with the Pi tool fm_watch_arm_pi, or restart Pi with -e /Users/qushuai9/.no-mistakes/worktrees/be4d97686c7c/01M6BNKV97BZXX917ZZVYK201C/.pi/extensions/fm-primary-turnend-guard.ts -e /Users/qushuai9/.no-mistakes/worktrees/be4d97686c7c/01M6BNKV97BZXX917ZZVYK201C/.pi/extensions/fm-primary-pi-watch.ts if the extensions are not loaded.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+warning: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab-spawn.dINvQl/data/pitrustspawn3/launch-brief.md records no ship branch; defaulting to legacy branch fm/pitrustspawn3
+warning: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab-spawn.dINvQl/data/pitrustspawn3/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+error: could not name the HOME an unpinned pi launch will read, so its Pi trust store cannot be selected: no input names a usable HOME (the launch-env source leaves it unset or empty, or this spawn has none), and the launch would read a store this spawn cannot name; refusing to launch a pi worker that could park on the trust dialog; inspect window fm-lab-spawn-test-23873-9561:w1:p3

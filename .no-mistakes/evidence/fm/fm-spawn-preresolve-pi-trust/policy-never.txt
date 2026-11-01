@@ -1,0 +1,4 @@
+=== policy never ===
+fm-pi-trust: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab-spawn.dINvQl/agent-never/settings.json sets defaultProjectTrust to "never", so Pi declines project trust for /Users/qushuai9/.treehouse/project-9298e4/1/project and renders no dialog; nothing was written, and that worker starts without the project settings, project extensions, and project skills it would otherwise load
+exit=0
+settings.json

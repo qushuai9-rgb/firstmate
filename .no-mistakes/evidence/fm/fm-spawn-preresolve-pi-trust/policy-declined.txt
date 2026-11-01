@@ -1,0 +1,5 @@
+=== recorded decline ===
+error: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab-spawn.dINvQl/agent-declined/trust.json records "Do not trust" for /Users/qushuai9/.treehouse/project-9298e4/1/project, which Pi applies to /Users/qushuai9/.treehouse/project-9298e4/1/project; refusing to reverse a decision the operator already made. Change or remove the /Users/qushuai9/.treehouse/project-9298e4/1/project entry in /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab-spawn.dINvQl/agent-declined/trust.json to allow this spawn
+error: refusing to pre-register Pi trust: could not record trust for '/Users/qushuai9/.treehouse/project-9298e4/1/project' in '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab-spawn.dINvQl/agent-declined/trust.json'
+exit=1
+store after: {"/Users/qushuai9/.treehouse/project-9298e4/1/project":false}

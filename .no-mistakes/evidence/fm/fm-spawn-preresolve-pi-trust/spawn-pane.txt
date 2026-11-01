@@ -1,0 +1,23 @@
+
+ Use /login to log into a provider via OAuth or API
+ key. See:
+
+ /Users/qushuai9/.local/share/pi-node/node-v22.23.2-d
+ arwin-arm64/lib/node_modules/@earendil-works/pi-codi
+ ng-agent/docs/providers.md
+
+ /Users/qushuai9/.local/share/pi-node/node-v22.23.2-d
+ arwin-arm64/lib/node_modules/@earendil-works/pi-codi
+ ng-agent/docs/models.md
+
+──────────────────────────────────────────────────────
+ Update Available
+ New version 1.4.0 is available. Run pi update
+ Changelog: https://pi.dev/changelog
+──────────────────────────────────────────────────────
+
+──────────────────────────────────────────────────────
+
+──────────────────────────────────────────────────────
+/Users/qushuai9/.treehouse/project-9298e4/1/project...
+0.0%/0 (auto)                                  unknown
