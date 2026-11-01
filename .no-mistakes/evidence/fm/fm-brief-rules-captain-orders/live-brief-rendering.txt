@@ -1,0 +1,31 @@
+Disposable marked lab home: /var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T//fm-lab.wqClve
+Ran: bin/fm-brief.sh <id> sample --mode <mode> [--base-branch release/x] | --scout | --secondmate --no-projects
+
+########## ship brief: direct-PR
+25:1. Never push to the default branch (push only your `fm/ev-direct-PR` branch). Never merge a PR.
+54:   append `needs-decision [at=<epoch>]: {background and each option with its consequence}` and stop. Firstmate will reply with the decision.
+102:The configured merge authority decides whether to merge the PR; firstmate relays the outcome. You never merge a PR.
+
+########## ship brief: no-mistakes
+26:1. Never push to the default branch. Never merge a PR.
+55:   append `needs-decision [at=<epoch>]: {background and each option with its consequence}` and stop. Firstmate will reply with the decision.
+135:The configured merge authority decides whether to merge the PR; firstmate relays the outcome. You never merge a PR.
+
+########## ship brief: local-only
+54:   append `needs-decision [at=<epoch>]: {background and each option with its consequence}` and stop. Firstmate will reply with the decision.
+102:The configured merge authority approves the ready branch, then firstmate merges it into local `main` through the guarded fast-forward path.
+
+########## ship brief: direct-PR+base
+26:1. Never push to the base branch `release/x` or the default branch (push only your `fm/ev-direct-PR-base` branch). Never merge a PR.
+55:   append `needs-decision [at=<epoch>]: {background and each option with its consequence}` and stop. Firstmate will reply with the decision.
+103:The configured merge authority decides whether to merge the PR; firstmate relays the outcome. You never merge a PR.
+
+########## scout brief
+46:   append `needs-decision [at=<epoch>]: {background and each option with its consequence}` and stop. Firstmate will reply with the decision.
+
+########## secondmate charter
+55:When escalating a decision, include its background and the consequence of each option.
+
+########## adversarial: worker tries to smuggle merge authority with --yolo
+error: --yolo is not a brief input; pass it to bin/fm-spawn.sh, which records the task's merge posture
+exit=1

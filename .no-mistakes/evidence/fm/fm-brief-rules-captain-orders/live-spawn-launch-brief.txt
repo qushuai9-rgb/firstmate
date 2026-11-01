@@ -1,0 +1,73 @@
+=== Scenario: real dispatch of a direct-PR worker through bin/fm-spawn.sh (harness=pi, herdr lab session fm-lab-briefspawn-71379-32448) ===
+
+--- spawn result ---
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.hZQgQc
+notice: live-spawn ships mode=direct-PR while the standing posture for proj is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+spawned live-spawn harness=pi kind=ship mode=direct-PR yolo=off window=fm-lab-briefspawn-71379-32448:w1:p2 worktree=/Users/qushuai9/.treehouse/proj-2688d4/1/proj
+
+--- launch-brief.md merge/decision lines actually delivered to the worker ---
+35:1. Never push to the default branch (push only your `fm/live-spawn` branch). Never merge a PR.
+64:   append `needs-decision [at=<epoch>]: {background and each option with its consequence}` and stop. Firstmate will reply with the decision.
+112:The configured merge authority decides whether to merge the PR; firstmate relays the outcome. You never merge a PR.
+
+--- live worker pane (first follow-up actions from the delivered brief) ---
+
+
+ $ pwd -P; git rev-parse --show-toplevel; git status
+ --short --branch; date +%s
+
+ /Users/qushuai9/.treehouse/proj-2688d4/1/proj
+ /Users/qushuai9/.treehouse/proj-2688d4/1/proj
+ ## HEAD (no branch)
+ 1793557165
+
+ Took 0.0s
+
+
+
+ $ find
+ '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm
+ -lab.hZQgQc/state/live-spawn.inbox' -maxdepth 1
+ -name '*.msg' 2>/dev/null | sort -V; echo
+ "---status---"; cat
+ '/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm
+ -lab.hZQgQc/state/live-spawn.status' 2>/dev/null
+
+ ---status---
+
+
+ Command exited with code 1
+
+ Took 0.0s
+
+
+
+ $ cd /Users/qushuai9/.treehouse/proj-2688d4/1/proj
+ && git checkout -b fm/live-spawn -- && git status
+ --short --branch && ls && echo "--- README ---" &&
+ tail -20 README.md
+
+ Switched to a new branch 'fm/live-spawn'
+ ## fm/live-spawn
+ README.md
+ --- README ---
+ # Brief dispatcher fixture
+
+ Took 0.5s
+
+
+
+ $ cd /Users/qushuai9/.treehouse/proj-2688d4/1/proj
+ && cat -A README.md; echo "---log---"; git log
+ --oneline -5; echo "---remote---"; git remote -v
+
+ ... (6 earlier lines, ctrl+o to expand)
+ file:///var/folders/py/8hh37cyd35q6pqybdtgst_pr0000g
+ n/T//fm-lab.hZQgQc/proj.origin.git (fetch)
+ origin
+ file:///var/folders/py/8hh37cyd35q6pqybdtgst_pr0000g
+ n/T//fm-lab.hZQgQc/proj.origin.git (push)
+
+ Took 0.0s
+
+

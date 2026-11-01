@@ -1,0 +1,56 @@
+Disposable marked lab home: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.vhAfos
+Flow: bin/fm-brief.sh <id> sample --scout (filled Task) -> bin/fm-promote.sh <id> --mode <mode> --yolo <on|off>
+This is the relaunch/handoff contract a promoted scout's replacement worker receives.
+
+########## promote mode=direct-PR yolo=on -> rc=0; promoted ev-direct-PR-on to ship mode=direct-PR yolo=on (teardown protection restored) wrote ship instructions for mode=direct-PR: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.vhAfos/data/ev-direct-PR-on/ship-instructions.md 
+-- ship-instructions.md (delivered contract):
+30:1. Never push to the default branch (push only your `fm/ev-direct-PR-on` branch). Never merge a PR.
+40:The configured merge authority decides whether to merge the PR; firstmate relays the outcome. You never merge a PR.
+-- brief.md current ship safety rule / Definition of done:
+22:1. Never push to any remote and never open a PR.
+117:1. Never push to the default branch (push only your `fm/ev-direct-PR-on` branch). Never merge a PR.
+127:The configured merge authority decides whether to merge the PR; firstmate relays the outcome. You never merge a PR.
+
+########## promote mode=direct-PR yolo=off -> rc=0; promoted ev-direct-PR-off to ship mode=direct-PR yolo=off (teardown protection restored) wrote ship instructions for mode=direct-PR: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.vhAfos/data/ev-direct-PR-off/ship-instructions.md 
+-- ship-instructions.md (delivered contract):
+30:1. Never push to the default branch (push only your `fm/ev-direct-PR-off` branch). Never merge a PR.
+40:The configured merge authority decides whether to merge the PR; firstmate relays the outcome. You never merge a PR.
+-- brief.md current ship safety rule / Definition of done:
+22:1. Never push to any remote and never open a PR.
+117:1. Never push to the default branch (push only your `fm/ev-direct-PR-off` branch). Never merge a PR.
+127:The configured merge authority decides whether to merge the PR; firstmate relays the outcome. You never merge a PR.
+
+########## promote mode=no-mistakes yolo=on -> rc=0; promoted ev-no-mistakes-on to ship mode=no-mistakes yolo=on (teardown protection restored) wrote ship instructions for mode=no-mistakes: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.vhAfos/data/ev-no-mistakes-on/ship-instructions.md 
+-- ship-instructions.md (delivered contract):
+30:1. Never push to the default branch. Never merge a PR.
+75:The configured merge authority decides whether to merge the PR; firstmate relays the outcome. You never merge a PR.
+-- brief.md current ship safety rule / Definition of done:
+22:1. Never push to any remote and never open a PR.
+117:1. Never push to the default branch. Never merge a PR.
+162:The configured merge authority decides whether to merge the PR; firstmate relays the outcome. You never merge a PR.
+
+########## promote mode=no-mistakes yolo=off -> rc=0; promoted ev-no-mistakes-off to ship mode=no-mistakes yolo=off (teardown protection restored) wrote ship instructions for mode=no-mistakes: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.vhAfos/data/ev-no-mistakes-off/ship-instructions.md 
+-- ship-instructions.md (delivered contract):
+30:1. Never push to the default branch. Never merge a PR.
+75:The configured merge authority decides whether to merge the PR; firstmate relays the outcome. You never merge a PR.
+-- brief.md current ship safety rule / Definition of done:
+22:1. Never push to any remote and never open a PR.
+117:1. Never push to the default branch. Never merge a PR.
+162:The configured merge authority decides whether to merge the PR; firstmate relays the outcome. You never merge a PR.
+
+########## promote mode=local-only yolo=on -> rc=0; promoted ev-local-only-on to ship mode=local-only yolo=on (teardown protection restored) wrote ship instructions for mode=local-only: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.vhAfos/data/ev-local-only-on/ship-instructions.md 
+-- ship-instructions.md (delivered contract):
+40:The configured merge authority approves the ready branch, then firstmate merges it into local `main` through the guarded fast-forward path.
+-- brief.md current ship safety rule / Definition of done:
+22:1. Never push to any remote and never open a PR.
+117:1. Never push to any remote and never open a PR. Work only on your `fm/ev-local-only-on` branch; firstmate handles the merge into local `main`.
+127:The configured merge authority approves the ready branch, then firstmate merges it into local `main` through the guarded fast-forward path.
+
+########## promote mode=local-only yolo=off -> rc=0; promoted ev-local-only-off to ship mode=local-only yolo=off (teardown protection restored) wrote ship instructions for mode=local-only: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.vhAfos/data/ev-local-only-off/ship-instructions.md 
+-- ship-instructions.md (delivered contract):
+40:The configured merge authority approves the ready branch, then firstmate merges it into local `main` through the guarded fast-forward path.
+-- brief.md current ship safety rule / Definition of done:
+22:1. Never push to any remote and never open a PR.
+117:1. Never push to any remote and never open a PR. Work only on your `fm/ev-local-only-off` branch; firstmate handles the merge into local `main`.
+127:The configured merge authority approves the ready branch, then firstmate merges it into local `main` through the guarded fast-forward path.
+
