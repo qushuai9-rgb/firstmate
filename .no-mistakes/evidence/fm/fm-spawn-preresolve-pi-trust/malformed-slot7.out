@@ -1,0 +1,2 @@
+error: /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-lab.JPS8DK/home/.pi/agent/settings.json is not valid JSON, so defaultProjectTrust is unknown
+error: refusing to pre-register Pi trust: could not record trust for '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-lab.JPS8DK/slot7' in '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-lab.JPS8DK/home/.pi/agent/trust.json'

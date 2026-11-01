@@ -1,0 +1,30 @@
+ok - a fresh task worktree is registered in Pi's own trust store
+ok - registration records the canonical worktree path Pi itself would key on
+ok - an existing registration is idempotent and leaves every other entry untouched
+ok - a new registration preserves every existing trust entry
+ok - a recorded 'Do not trust' decision refuses the spawn instead of being reversed
+ok - a trusted ancestor counts as already trusted and writes nothing
+ok - an undecided ancestor entry is skipped and the nearest recorded decision wins
+ok - an inherited 'Do not trust' refuses the spawn instead of being overridden
+ok - an unwritable store fails loudly and leaves nothing behind
+ok - a malformed store fails loudly instead of being rewritten
+ok - a non-boolean trust value fails loudly instead of being silently rewritten
+ok - primary checkouts, subdirectories, plain directories, unrelated worktrees, home, /, and relative roots are refused
+ok - the store root follows the pinned agent dir and else ~/.pi/agent, never the invoking environment
+ok - defaultProjectTrust never is reported and never overridden
+ok - defaultProjectTrust always is reported without a redundant write
+ok - defaultProjectTrust ask registers the worktree, replacing the interactive confirmation
+ok - a saved trust decision outranks defaultProjectTrust
+ok - a pinned root's defaultProjectTrust decides its own store, not the default root's
+ok - the pinned root's own 'ask' policy registers the worktree
+ok - an unreadable or malformed Pi settings file refuses loudly, never as 'never'
+ok - pi ship spawn registers its worktree before launch
+ok - pi-signed ship spawn registers its worktree before launch
+ok - an unpinned pi spawn registers Pi's default store even when the spawn environment names another root
+ok - a failed registration stops the spawn with a named error
+ok - a pi spawn under defaultProjectTrust never launches without pre-registering trust
+ok - a non-Pi harness leaves Pi's trust store untouched
+# all fm-pi-trust tests passed
+real 32.68
+user 6.20
+sys 6.26

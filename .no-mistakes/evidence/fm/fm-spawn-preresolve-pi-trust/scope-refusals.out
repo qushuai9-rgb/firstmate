@@ -1,0 +1,21 @@
+### primary checkout
+error: refusing to pre-register Pi trust: '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-lab.JPS8DK/project' is a primary checkout, not an isolated worktree
+rc=1
+### plain directory
+error: refusing to pre-register Pi trust: '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-lab.JPS8DK/plain' is not inside a git repository
+rc=1
+### subdirectory of a worktree
+error: refusing to pre-register Pi trust: '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-lab.JPS8DK/slot/sub' is not a worktree root (its root is '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-lab.JPS8DK/slot')
+rc=1
+### unrelated worktree
+error: refusing to pre-register Pi trust: '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-lab.JPS8DK/other' is a primary checkout, not an isolated worktree
+rc=1
+### worktree of an unrelated project
+error: refusing to pre-register Pi trust: '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-lab.JPS8DK/other-wt' is not a worktree of project '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-lab.JPS8DK/project'
+rc=1
+### filesystem root
+error: refusing to pre-register Pi trust: '/' is the filesystem root, not a task worktree
+rc=1
+### home directory
+error: refusing to pre-register Pi trust: '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-pi-lab.JPS8DK/home' is the home directory, not a task worktree
+rc=1

@@ -1,0 +1,4 @@
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/tmp/fm-pi-trust-spawn.9StzM3/home
+warning: /private/tmp/fm-pi-trust-spawn.9StzM3/home/data/fmpitrustlive1/launch-brief.md records no ship branch; defaulting to legacy branch fm/fmpitrustlive1
+warning: /private/tmp/fm-pi-trust-spawn.9StzM3/home/data/fmpitrustlive1/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+error: 'herdr status --json' failed; is herdr installed correctly?
