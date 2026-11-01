@@ -1,0 +1,5 @@
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-faillab.2kdJhO
+warning: herdr server version 0.7.4 (protocol 16) is older than the 0.8.0 floor for presentation spaces, where projected cleanup can steal the active workspace; using the ordinary flat layout instead. Upgrade herdr to 0.8.0 or newer (herdr update) to restore the projection, or write "on" into config/herdr-presentation-spaces to force it on this release.
+error: EACCES: permission denied, open '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-faillab.2kdJhO/agent/.trust.json.fm-trust.70588.91fa7422cbb59da6'
+error: refusing to pre-register Pi trust: could not record trust for '/Users/qushuai9/.treehouse/proj-29dd3e/1/proj' in '/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-faillab.2kdJhO/agent/trust.json'
+error: could not pre-register Pi project trust for /Users/qushuai9/.treehouse/proj-29dd3e/1/proj; refusing to launch a pi worker that would wedge on the trust dialog; inspect window fm-lab-fm-pitrust-fail-13832-17409:w1:p2

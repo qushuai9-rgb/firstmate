@@ -1,0 +1,30 @@
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.yGXadF/slot5 (slot5)
+0.0%/128k (auto)                                                                                               lab-model pi v0.84.2                                                                                                             
+ escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash · ctrl+o more                                        
+ Press ctrl+o to show full startup help and loaded resources.                                                           
+                                                                                                                        
+ Pi can explain its own features and look up its docs. Ask it how to use or extend Pi.                                  
+
+ This project is not trusted. Project .pi resources and packages are ignored. Use /trust to save a trust decision, then 
+ restart pi.                                                                                                            
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.yGXadF/slot5 (slot5)
+0.0%/128k (auto)                                                                                               lab-model                                                                                                                        
+ first turn                                                                                                             
+                                                                                                                        
+
+ ⠋ Working...                                                                                                           
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.yGXadF/slot5 (slot5)
+0.0%/128k (auto)                                                                                               lab-model
+ LAB_WORKER_TURN_OK                                                                                                     
