@@ -1,0 +1,84 @@
+worktree: /Users/qushuai9/.no-mistakes/worktrees/be4d97686c7c/01M6E93RTP8V8FKHNSMN28SJYZ
+tasks-axi: /Users/qushuai9/.local/share/pi-node/node-v22.23.2-darwin-arm64/bin/tasks-axi (0.2.6)
+git: git version 2.54.0 (Apple Git-157)
+--- rendered backlog (open PR) ---
+# Backlog
+
+## In flight
+## Queued
+## Done
+- [x] task-x1 - teardown fixture task (kind: ship) (done 2026-11-02)
+  Delivered, merge not confirmed because it was still open when this finished: https://github.com/example/repo/pull/7. The link is a historical record whose merge was not verified in this run
+RESULT teardown-open-pr: pass - done with the link kept in the body note
+--- rendered backlog (merged PR) ---
+# Backlog
+
+## In flight
+## Queued
+## Done
+- [x] task-x1 - teardown fixture task https://github.com/example/repo/pull/7 (kind: ship) (merged 2026-11-02)
+RESULT teardown-merged-pr: pass - the forge-reported merge still records merged with its pr link
+--- rendered backlog (forge read fails) ---
+# Backlog
+
+## In flight
+## Queued
+## Done
+- [x] task-x1 - teardown fixture task (kind: ship) (done 2026-11-02)
+  Delivered, merge not confirmed because its pull request state could not be read: https://github.com/example/repo/pull/7. The link is a historical record whose merge was not verified in this run
+RESULT teardown-unreadable: pass - done with a read-failure note
+--- rendered backlog (renderer-accepted URL) ---
+# Backlog
+
+## In flight
+## Queued
+## Done
+- [x] task-x1 - teardown fixture task (kind: ship) (done 2026-11-02)
+  Delivered, merge not confirmed because its pull request state could not be read: https://github.com/o--o/repo/pull/7. The link is a historical record whose merge was not verified in this run
+RESULT renderer-accepted-url: pass - kept as an unconfirmed note, never a merge
+--- rendered backlog (captain-held retention) ---
+# Backlog
+
+## In flight
+## Queued
+- [ ] task-x1 - retain fixture task (kind: ship) (since 2026-11-02) (hold: captain merge approval pending) (hold-kind: captain)
+  Deliverable of the finished work: Delivered, merge not confirmed because it was still open when this finished: https://github.com/example/repo/pull/7. The link is a historical record whose merge was not verified in this run
+## Done
+RESULT teardown-retain: pass - held row retains the deliverable, not a pr link
+--- rendered backlog (captain answer) ---
+# Backlog
+
+## In flight
+## Queued
+## Done
+- [x] task-x1 - retain fixture task (kind: ship) (done 2026-11-02) (hold: captain merge approval pending) (hold-kind: captain)
+  Resolution recorded by fm-captain-hold.
+  Decision digest: 55270868a508016db6aee1eb35fdbbcad6f62fc1bd7485c277152e0dfea55aa1
+  Resolution mode: answered
+
+  Captain decision:
+  Do not merge this pull request yet.
+
+  Deliverable of the finished work: Delivered, merge not confirmed because it was still open when this finished: https://github.com/example/repo/pull/7. The link is a historical record whose merge was not verified in this run
+RESULT captain-answer: pass - answer closes as done, keeps the url, and records the sentence once
+--- replayed row (punctuation note) ---
+task:
+  id: task-x1
+  title: codec fixture task
+  state: done
+  blocked: no
+  blocked_by: none
+  held: no
+  hold_reason: "-"
+  hold_kind: "-"
+  hold_until: "-"
+  kind: ship
+  repo: "-"
+  priority: "-"
+  created: "-"
+  closed: 2026-11-02
+  deps: none
+  links: none
+  body: "Delivered, it's (not) merged: #1 at 50% *pending*!"
+RESULT pending-close-note-codec: pass - punctuation round-tripped and a line break stayed refused
+OVERALL: pass

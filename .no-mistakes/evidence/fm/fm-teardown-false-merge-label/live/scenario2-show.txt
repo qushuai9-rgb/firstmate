@@ -1,0 +1,18 @@
+task:
+  id: task-x1
+  title: "teardown fixture task https://github.com/example/repo/pull/7"
+  state: done
+  blocked: no
+  blocked_by: none
+  held: no
+  hold_reason: "-"
+  hold_kind: "-"
+  hold_until: "-"
+  kind: ship
+  repo: "-"
+  priority: "-"
+  created: "-"
+  closed: 2026-11-02
+  deps: none
+  links: "pr:https://github.com/example/repo/pull/7"
+  body: ""

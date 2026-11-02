@@ -1,0 +1,7 @@
+STAGED
+id=task-x1
+data=/private/var/folders/py/8hh37cyd35q6pqybdtgst_pr0000gn/T/fm-lab.yX2HGe/data
+spawn_gen=live-drive-task-x1
+cleanup_incomplete=0
+arg=--note
+arg=Delivered,%20it's%20(not)%20merged:%20#1%20at%2050%25%20*pending*!
