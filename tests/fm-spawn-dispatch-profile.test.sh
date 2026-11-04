@@ -270,7 +270,7 @@ test_relative_home_overrides_launch_with_absolute_cross_process_paths() {
 
   out=$(
     cd "$CASE_DIR" || exit 1
-    CDPATH="$CASE_DIR/cdpath" FM_ROOT_OVERRIDE='' FM_HOME=home \
+    CDPATH="$CASE_DIR/cdpath" FM_ROOT_OVERRIDE='' FM_HOME=home HOME="$HOME_DIR" \
       FM_STATE_OVERRIDE=home/state FM_DATA_OVERRIDE=home/data \
       FM_PROJECTS_OVERRIDE=home/projects FM_CONFIG_OVERRIDE=home/config \
       FM_SPAWN_NO_GUARD=1 FM_FAKE_PANE_PATH="$WT_DIR" TMUX="fake,1,0" \
@@ -299,7 +299,7 @@ test_home_defaults_preserve_absolute_or_resolve_relative_paths() {
   : > "$LAUNCH_LOG"
   out=$(
     cd "$CASE_DIR" || exit 1
-    FM_ROOT_OVERRIDE='' FM_HOME=home \
+    FM_ROOT_OVERRIDE='' FM_HOME=home HOME="$HOME_DIR" \
       FM_STATE_OVERRIDE='' FM_DATA_OVERRIDE='' \
       FM_PROJECTS_OVERRIDE=home/projects FM_CONFIG_OVERRIDE=home/config \
       FM_SPAWN_NO_GUARD=1 FM_FAKE_PANE_PATH="$WT_DIR" TMUX="fake,1,0" \
@@ -319,7 +319,7 @@ test_home_defaults_preserve_absolute_or_resolve_relative_paths() {
   ln -s "$HOME_DIR" "$linked_home"
   : > "$LAUNCH_LOG"
   out=$(
-    FM_ROOT_OVERRIDE='' FM_HOME="$linked_home" \
+    FM_ROOT_OVERRIDE='' FM_HOME="$linked_home" HOME="$HOME_DIR" \
       FM_STATE_OVERRIDE='' FM_DATA_OVERRIDE='' \
       FM_PROJECTS_OVERRIDE="$linked_home/projects" FM_CONFIG_OVERRIDE="$linked_home/config" \
       FM_SPAWN_NO_GUARD=1 FM_FAKE_PANE_PATH="$WT_DIR" TMUX="fake,1,0" \
@@ -347,7 +347,7 @@ test_absolute_override_spelling_is_preserved_in_launch_paths() {
   : > "$LAUNCH_LOG"
 
   out=$(
-    FM_ROOT_OVERRIDE='' FM_HOME="$linked_home" \
+    FM_ROOT_OVERRIDE='' FM_HOME="$linked_home" HOME="$HOME_DIR" \
       FM_STATE_OVERRIDE="$linked_home/state" FM_DATA_OVERRIDE="$linked_home/data" \
       FM_PROJECTS_OVERRIDE="$linked_home/projects" FM_CONFIG_OVERRIDE="$linked_home/config" \
       FM_SPAWN_NO_GUARD=1 FM_FAKE_PANE_PATH="$WT_DIR" TMUX="fake,1,0" \
