@@ -85,20 +85,14 @@ Release happens only on explicit retirement or seed rollback, never on routine r
 
 `bin/fm-home-seed.sh` copies the charter into the secondmate home as `data/charter.md`.
 It also writes the gitignored `.fm-secondmate-parent` durable binding before the required `.fm-secondmate-home` identity marker; the parser header in [`bin/fm-secondmate-parent-lib.sh`](../../../bin/fm-secondmate-parent-lib.sh) owns the record contract, and both files must remain in place.
-`bin/fm-spawn.sh --secondmate` launches it through the secondmate harness path, resolving `config/secondmate-harness` -> `config/crew-harness` -> the primary's own harness unless an explicit per-spawn harness override is passed.
-Each launch gets a generated role-and-home instruction overlay naming its absolute home and original charter path; it does not rewrite the standing charter.
-The launch sets `FM_ROLE=secondmate` and `FM_SECONDMATE_CHARTER` for the agent, and delivers the overlay as an operational input in the secondmate home's state rather than the primary's.
-[`sessionstart-nudge.md`](../../../docs/sessionstart-nudge.md#shared-wrapper-and-safety) owns the primary session-start stand-down behavior.
-
-`config/secondmate-harness` may also pin a concrete model and effort for the secondmate agent, in the SAME file rather than a new one: the format is a single whitespace-separated line `<harness> [<model>] [<effort>]`, with only the first non-empty, non-comment line parsed.
-A bare `<harness>` (today's format, e.g. `claude`) behaves exactly as before - harness only, no model/effort flag - so this is fully backward-compatible.
-`bin/fm-harness.sh secondmate-model` and `bin/fm-harness.sh secondmate-effort` print the optional 2nd/3rd tokens (empty when absent, or when the file is absent/`default`/harness-only); they read only `config/secondmate-harness`, never `config/crew-harness`, which stays a bare adapter name.
-For a `--secondmate` spawn, `bin/fm-spawn.sh` populates `MODEL`/`EFFORT` from those tokens only when the harness itself came from the secondmate config path for that spawn.
-For a local route, an explicit per-spawn `--harness` flag, positional harness arg, or raw launch command starts clean on model and effort too, unless the caller also passes explicit `--model` or `--effort`.
-A remote route accepts only a verified harness adapter and refuses a raw launch command at the host boundary.
-When the file's tokens do apply, an explicit per-spawn `--model` or `--effort` flag always wins over the file's token for that axis.
-Because this resolves from the file on every spawn, the pin is durable across every respawn (recovery, `/updatefirstmate`, restart) exactly like the harness axis itself - e.g. `config/secondmate-harness` containing `claude opus` keeps a secondmate pinned to Opus even if the primary's own default model later changes.
-This is secondmate-only: crewmate/scout model resolution is untouched by this file.
+[`docs/configuration.md`](../../../docs/configuration.md#choose-the-secondmate-harness) owns the primary's secondmate runtime pins, per-mate overrides, launch precedence, compatibility, and malformed-file refusal.
+Select the registered mate's id when resolving its pin; [`bin/fm-harness.sh`](../../../bin/fm-harness.sh)'s header owns the resolver commands.
+Each launch also gets a generated role-and-home instruction overlay naming the absolute home and this home's own `data/charter.md`; it does not rewrite the standing charter.
+The launch boundary reads only that home copy: a symlinked, non-regular, or out-of-home copy is unsafe and is never read.
+When that copy is absent or unsafe and the parent copy `data/<id>/brief.md` is also absent, the launch refuses before any endpoint, metadata, or launch record exists, naming both checked paths and `bin/fm-home-seed.sh` as the fix; with the parent copy present, the overlay reports `CHARTER: MISSING` or `CHARTER: UNSAFE` and labels that copy as an explicitly labelled fallback.
+The overlay is written to `$DATA/<id>/secondmate-launch-brief.md` under the launching primary home's data dir (on a remote route, that host's): a record-backed harness (claude) publishes it as an operational-inbox record in the secondmate home's own state, while every other harness (pi/pi-signed/codex/...) receives that primary-home file on stdin.
+It scopes the boundary to the PRIMARY home: it names this home's own startup as the thing that takes this home's lock and arms this home's watcher, and forbids only startup against the primary home.
+[`sessionstart-nudge.md`](../../../docs/sessionstart-nudge.md#shared-wrapper-and-safety) owns the home-scoped secondmate startup posture `bin/fm-session-start.sh` runs in a marked secondmate home.
 
 This section is the single owner of the secondmate sync and inherited-local-material propagation contract; `AGENTS.md` sections 3 and 4 point here.
 Before a local launch, `fm-spawn.sh --secondmate` locally fast-forwards the home to the primary firstmate checkout's current default-branch commit when it is safe, or reconciles a clean divergence whose complete local result is already present there (e.g. after a squash merge) with `reset --keep`; dirty, uniquely diverged, or in-flight homes launch unchanged with a warning, and a genuine divergence gets the same durable reconciliation record `bin/fm-ff-lib.sh` writes for `/updatefirstmate`.
