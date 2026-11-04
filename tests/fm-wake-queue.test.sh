@@ -1721,6 +1721,21 @@ test_self_announced_append_guards() {
   run_wake_lib fm_wake_signal_seen_current "$state" "$status" \
     || fail "the self-announced close left unannounced bytes behind"
 
+  # One call may carry several complete lines (a captain-held transfer over more
+  # than one still-open decision, or a multi-key answer). Every line is appended
+  # and covered by the same single marker advance: a caller must never silently
+  # leave all but the first decision open while claiming the close succeeded.
+  run_wake_lib fm_wake_status_append_self_announced "$state" "$status" \
+    'captain-held [key=k1]: tracked by sample-call' \
+    'captain-held [key=k2]: tracked by sample-call' \
+    || fail "a multi-line self-announced close was not suppressed (rc=$?)"
+  grep -Fq 'captain-held [key=k1]: tracked by sample-call' "$status" \
+    || fail "a multi-line self-announced close lost its first line"
+  grep -Fq 'captain-held [key=k2]: tracked by sample-call' "$status" \
+    || fail "a multi-line self-announced close lost its second line"
+  run_wake_lib fm_wake_signal_seen_current "$state" "$status" \
+    || fail "a multi-line self-announced close left unannounced bytes behind"
+
   # A later DIFFERENT note from any other writer still wakes.
   printf 'needs-decision [key=k2]: a new decision\n' >> "$status"
   run_wake_lib fm_wake_signal_seen_current "$state" "$status" \

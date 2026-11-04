@@ -244,17 +244,32 @@ fm_pi_extension_version() {
   fi
 }
 
-# fm_pi_extension_loaded <marker> <expected-version> <session-lock>
+# fm_pi_extension_loaded <marker> <expected-version> <session-lock> [active]
 # True when <marker> records <expected-version> and names the session process in
 # <session-lock>, i.e. the session holding this home loaded exactly this build.
+# The Pi watcher marker additionally carries its generation phase. Requiring
+# `active` rejects the handoff marker a retiring generation leaves behind, so a
+# running Pi process whose replacement did not load the watcher extension can
+# never vouch for an unheld watcher lock with stale load evidence.
 fm_pi_extension_loaded() {
-  local marker=$1 expected_version=$2 lock=$3 marker_version marker_pid lock_pid
+  local marker=$1 expected_version=$2 lock=$3 required_phase=${4:-} marker_version marker_pid lock_pid owner
   [ -f "$marker" ] && [ -f "$lock" ] && [ -n "$expected_version" ] || return 1
   marker_version=$(sed -n '1p' "$marker")
   marker_pid=$(sed -n '2p' "$marker")
   lock_pid=$(sed -n '1p' "$lock")
   [ -n "$marker_pid" ] || return 1
-  [ "$marker_version" = "$expected_version" ] && [ "$marker_pid" = "$lock_pid" ]
+  [ "$marker_version" = "$expected_version" ] && [ "$marker_pid" = "$lock_pid" ] || return 1
+  [ -z "$required_phase" ] && return 0
+  owner=$(sed -n '3p' "$marker")
+  case "$owner" in
+    generation=*\ phase="$required_phase")
+      owner=${owner#generation=}
+      owner=${owner%% *}
+      case "$owner" in ''|0|*[!0-9]*) return 1 ;; esac
+      return 0
+      ;;
+    *) return 1 ;;
+  esac
 }
 
 # fm_pi_extension_owns_supervision <state> <root>
@@ -2201,7 +2216,7 @@ fm_wake_status_mark_current() {  # <state> <status-file>
 # line THIS home's own machinery writes as bookkeeping it has already presented
 # in the very turn or tick that writes it (an answerer-closes resolved line, a
 # pending-reply escalation close, a captain-held transfer). Such a close must
-# not wake the session that wrote it, so this appends the line and then
+# not wake the session that wrote it, so this appends the line(s) and then
 # advances the watcher's seen marker to cover exactly the appended bytes and
 # nothing else. The advance is provenance-gated and fails toward waking:
 #   - the marker advances ONLY when the file's pre-append signature matched the
@@ -2209,15 +2224,24 @@ fm_wake_status_mark_current() {  # <state> <status-file>
 #     deliberately absorbed), AND the post-append size equals the pre-append
 #     size plus exactly the appended bytes (no foreign write interleaved);
 #   - on ANY other condition - missing marker, pending foreign bytes, an
-#     interleaved writer, an unreadable signature - the line is still appended
-#     but the marker is left alone, so the watcher surfaces the file normally.
+#     interleaved writer, an unreadable signature - the line(s) are still
+#     appended but the marker is left alone, so the watcher surfaces the file
+#     normally.
 # A later, different line from any other writer grows the size past the marker
 # and wakes as before: task identity alone can never suppress new content.
+# Every trailing argument is one complete status line, appended in ONE write:
+# a caller closing several decisions (a multi-key answer, a captain-held
+# transfer over more than one open decision) must not lose all but the first,
+# which would leave the remaining decisions open while the marker claimed they
+# had been closed.
 # Returns 0 appended and self-announced, 1 appended but left for the watcher
 # (the safe direction), 2 the append itself failed.
-fm_wake_status_append_self_announced() {  # <state> <status-file> <line>
-  local state=$1 file=$2 line=$3 marker pre_sig='' pre_size='' pre_ident='' post_size post_ident
+fm_wake_status_append_self_announced() {  # <state> <status-file> <line>...
+  local state=$1 file=$2 line marker pre_sig='' pre_size='' pre_ident='' post_size post_ident
+  local added=0
   local LC_ALL=C
+  shift 2
+  [ "$#" -gt 0 ] || return 1
   _fm_wake_require_classify || return 1
   marker=$(fm_wake_signal_seen_path "$state" "$file")
   if [ -e "$file" ]; then
@@ -2225,7 +2249,10 @@ fm_wake_status_append_self_announced() {  # <state> <status-file> <line>
     pre_size=$(_fm_status_file_size "$file") || pre_size=''
     pre_ident=$(_fm_open_decisions_file_ident "$file") || pre_ident=''
   fi
-  printf '%s\n' "$line" >> "$file" || return 2
+  for line in "$@"; do
+    added=$((added + ${#line} + 1))
+  done
+  printf '%s\n' "$@" >> "$file" || return 2
   [ -n "$pre_sig" ] || return 1
   status_presentation_marker_reported_matches "$marker" "$pre_sig" || return 1
   [ "$(status_presentation_marker_offset "$marker" "$file")" = "$pre_size" ] || return 1
@@ -2233,7 +2260,7 @@ fm_wake_status_append_self_announced() {  # <state> <status-file> <line>
   post_ident=$(_fm_open_decisions_file_ident "$file") || return 1
   case "$pre_size$post_size" in ''|*[!0-9]*) return 1 ;; esac
   [ -n "$pre_ident" ] && [ "$post_ident" = "$pre_ident" ] || return 1
-  [ "$post_size" -eq $((pre_size + ${#line} + 1)) ] || return 1
+  [ "$post_size" -eq $((pre_size + added)) ] || return 1
   fm_wake_status_seen_commit "$state" "$file" "$post_size" "$post_ident" || return 1
   return 0
 }
