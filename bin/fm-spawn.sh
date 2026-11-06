@@ -1288,6 +1288,7 @@ RELAUNCH_REPLACEMENT_WT=
 CONFIG_INHERIT_LOCK=
 CONFIG_INHERIT_LOCK_HELD=0
 GIT_HOOKS_DIR=
+SPAWN_FRESH_ENDPOINT_OPENED=0
 SPAWN_LAUNCH_SENT=0
 SPAWN_ENDPOINT_CLOSED=0
 
@@ -3493,6 +3494,21 @@ spawn_worktree_isolated() { # <path>
     return 1
   fi
   return 0
+}
+
+# spawn_endpoint_hint: the operator pointer for a pre-launch refusal. Only a
+# fresh polytoken spawn closes its endpoint on abort, so only it points away
+# from the window; every other harness keeps the plain inspect pointer.
+spawn_endpoint_closes_on_abort() {
+  [ "$SPAWN_FRESH_ENDPOINT_OPENED" = 1 ] && [ "$SPAWN_LAUNCH_SENT" = 0 ]
+}
+
+spawn_endpoint_hint() {
+  if spawn_endpoint_closes_on_abort; then
+    printf 'window %s is closed on exit, returning any pool slot it held' "$T"
+  else
+    printf 'inspect window %s' "$T"
+  fi
 }
 
 validate_spawn_worktree() { # <source> <inspect-target>
