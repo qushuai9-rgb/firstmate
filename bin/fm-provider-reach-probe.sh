@@ -23,8 +23,27 @@
 # Usage:
 #   fm-provider-reach-probe.sh --host <host[:port][/path]> [options]
 #
-# The caller names the endpoint explicitly; the probe ships no provider
-# endpoint of its own. Nothing here reads, needs, or transmits a credential.
+# The caller names the endpoint explicitly; the probe ships no provider endpoint
+# of its own, and no built-in target, alias, or provider name exists to select
+# one. That is an authorization boundary rather than a convenience trade: a
+# built-in vendor host would make this tool decide on its own to send an
+# unauthenticated request to one particular third party, whereas with an explicit
+# host the destination, and the responsibility for it, stay with the caller.
+# Nothing here reads, needs, or transmits a credential; a --host that carries
+# userinfo is refused rather than sent.
+#
+# `--host` takes a hostname, an IPv4 literal, or an IPv6 literal in either form:
+# bracketed with an optional port (`[2001:db8::1]:8443`), or a bare literal
+# (`2001:db8::1`), which is bracketed for the request. A port on an IPv6 literal
+# requires the bracketed form, because `2001:db8::1:8443` is itself a valid
+# address. A path may follow either form.
+#
+# Entry in this tool's own history, kept because it is easy to repeat: the host
+# in local use is `xhyapi.com`, without an `api.` prefix, and `api.xhyapi.com`
+# answers NXDOMAIN permanently. A probe of the wrong name looked exactly like an
+# upstream outage for several days. With no built-in target a naming mistake has
+# to be written out in the --host the caller supplies, so it surfaces as an
+# explicit configuration error instead of a silent default.
 #
 # Options:
 #   --timeout <seconds>   same bound as FM_PROVIDER_REACH_PROBE_TIMEOUT and
@@ -47,23 +66,36 @@
 #   unreachable      20   connection failed, timeout, or no address: NXDOMAIN or any
 #                         lookup errors print dns=unknown and HTTP is still
 #                         attempted, so a DNS-tool problem cannot suppress the probe
-#   invalid-target   2    --host cannot yield an authority for a request, e.g.
-#                         a value with no host part
+#   invalid-target   2    --host yields no request authority at all, e.g. a path
+#                         with no host part
 #   invalid-input    2    missing --host, an unexpected argument, a non-numeric,
 #                         zero, or negative --timeout value, duplicate options,
-#                         or a missing option value
+#                         a missing option value (a token starting with `-`
+#                         counts as missing), an unusable --host authority
+#                         (a port outside 1-65535 or written with a leading
+#                         zero, a malformed IP literal, a bad bracket shape, a
+#                         host name character outside letters/digits/dots/
+#                         hyphens/underscores, whitespace, or a control
+#                         character), or a credential-bearing proxy URL
 #   tool-missing     64   curl is not installed: nothing was probed and the line
 #                         says so rather than silently reporting another outcome
-# Exit 2 is reserved for usage and host-configuration errors. A running probe
-# always prints exactly one line on stdout, including tool-missing and
-# invalid-target; invalid-input is the one error path that prints only on stderr.
+# Exit 2 is reserved for usage, host-configuration, and proxy-environment
+# errors. A running probe always prints exactly one line on stdout, including
+# tool-missing and invalid-target; invalid-input is the one error path that
+# prints only on stderr.
 #
 # Environment:
-#   FM_PROVIDER_REACH_PROBE_TIMEOUT   hard per-phase bound in seconds; must be a
-#                                     positive integer, else the default 10 is
-#                                     used. Zero is rejected because `timeout 0`
-#                                     and the Perl fallback's `alarm 0` both mean
-#                                     "no deadline".
+#   FM_PROVIDER_REACH_PROBE_TIMEOUT   hard bound in seconds applied to each
+#                                     resolver invocation and to the one HTTP
+#                                     request. With N configured resolver
+#                                     candidates the DNS phase can spend up to 2N
+#                                     bounds - an A query and its AAAA fallback
+#                                     for each - before the request spends one
+#                                     more, so the whole run is bounded by 2N+1
+#                                     bounds. Must be a positive integer, else the
+#                                     default 10 is used. Zero is rejected because
+#                                     `timeout 0` and the Perl fallback's
+#                                     `alarm 0` both mean "no deadline".
 #   FM_PROVIDER_REACH_DNS_TOOL        one resolver CLI, or a whitespace-separated
 #                                     preference list tried in order until one that
 #                                     is installed answers (default: /usr/bin/dig,
@@ -94,11 +126,38 @@ Usage:
   fm-provider-reach-probe.sh --host <host[:port][/path]> [options]
 
 The endpoint is named explicitly with --host; the probe ships no provider
-endpoint of its own. Nothing here reads, needs, or transmits a credential.
+endpoint of its own, and no built-in target, alias, or provider name selects one.
+That is an authorization boundary, not a convenience gap: a built-in vendor host
+would make this tool decide by itself to send an unauthenticated request to one
+particular third party, while an explicit --host keeps the destination, and the
+responsibility for it, with the caller. Nothing here reads, needs, or transmits a
+credential; a --host carrying userinfo is refused rather than sent.
+
+--host accepts:
+  hostname[/path]            e.g. example.com/health
+  hostname:port[/path]       e.g. example.com:8443/health
+  IPv4 literal[/path]        e.g. 192.0.2.10/health
+  [IPv6 literal][:port]      e.g. [2001:db8::1]:8443/health
+  bare IPv6 literal[/path]   e.g. 2001:db8::1, bracketed for the request
+A port on an IPv6 literal requires the bracketed form, because
+2001:db8::1:8443 is itself a valid address.
+
+Known naming pitfall, kept because it is easy to repeat: the host in local use
+is xhyapi.com, with no api. prefix; api.xhyapi.com answers NXDOMAIN
+permanently. Probing the wrong name once looked like an upstream outage for
+days. With no built-in target that mistake has to appear in the --host the
+caller writes, so it is an explicit configuration error rather than a default.
+
+Example for the local endpoint, including its path:
+  fm-provider-reach-probe.sh --host xhyapi.com/v1/models
 
 Options:
-  --timeout <seconds>   hard per-phase bound (positive integer, default 10);
-                        beats FM_PROVIDER_REACH_PROBE_TIMEOUT
+  --timeout <seconds>   hard bound applied to each resolver invocation and to the
+                        one HTTP request (positive integer, default 10): with N
+                        configured resolver candidates the DNS phase can spend up
+                        to 2N bounds (an A query plus its AAAA fallback each),
+                        then the request spends one more; beats
+                        FM_PROVIDER_REACH_PROBE_TIMEOUT
   -h, --help            show this help
 
 Prints exactly one line on stdout; the probe label is hostname[:port] and
@@ -118,9 +177,15 @@ Exit status (verdicts are not eligibility):
   20  unreachable     connection failed, timed out, or no address (NXDOMAIN
                       exits before HTTP; resolver errors report dns=unknown and
                       continue to HTTP)
-  2   invalid-target  --host yields no request authority
+  2   invalid-target  --host carries no request authority at all (a path only)
   2   invalid-input   missing/unknown --host, an unexpected argument, a bad or
-                      repeated --timeout, or a missing value (stderr only)
+                      repeated --timeout, a missing option value (a token
+                      starting with - counts as missing), an unusable --host
+                      authority (a port outside 1-65535 or with a leading zero,
+                      a malformed IP literal, a bad bracket shape, a host name
+                      character outside letters/digits/dots/hyphens/underscores,
+                      whitespace, or a control character), or a
+                      credential-bearing proxy URL (stderr only)
   64  tool-missing    curl absent: nothing probed, one line on stdout
 EOF
 }
@@ -138,15 +203,15 @@ while [ $# -gt 0 ]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
     --host)
-      [ -n "${2:-}" ] || die_input "--host needs a value"
+      case "${2:-}" in ''|-*) die_input "--host needs a value" ;; esac
       [ -z "$HOST_ARG" ] || die_input "only one --host may be given"
       HOST_ARG=$2; shift 2 ;;
     --timeout)
-      [ -n "${2:-}" ] || die_input "--timeout needs a value"
+      case "${2:-}" in ''|-*) die_input "--timeout needs a value" ;; esac
       [ -z "$TIMEOUT_ARG" ] || die_input "only one --timeout may be given"
       TIMEOUT_ARG=$2; shift 2 ;;
-    -*) die_input "unknown option: $1" ;;
-    *) die_input "unexpected argument: $1" ;;
+    -*) die_input "unknown option" ;;
+    *) die_input "unexpected argument" ;;
   esac
 done
 [ -n "$HOST_ARG" ] || die_input "--host <host[:port][/path]> is required"
@@ -157,6 +222,7 @@ normalize_timeout() {
   case "$1" in
     ''|0|*[!0-9]*|0[0-9]*) return 1 ;;
   esac
+  [ "${#1}" -le 9 ] || return 1
   [ "$1" -gt 0 ] || return 1
   return 0
 }
@@ -166,8 +232,33 @@ normalize_timeout "$TIMEOUT" || TIMEOUT=$DEFAULT_TIMEOUT
 if [ -n "$TIMEOUT_ARG" ]; then
   # An explicit --timeout is a contract violation, not a hint: refuse loudly
   # rather than quietly falling back to the default the caller did not ask for.
-  normalize_timeout "$TIMEOUT_ARG" || die_input "--timeout must be a positive integer, got '$TIMEOUT_ARG'"
+  normalize_timeout "$TIMEOUT_ARG" || die_input "--timeout must be a positive integer"
   TIMEOUT=$TIMEOUT_ARG
+fi
+
+# Curl honors proxy environment variables even with -q. Select only the HTTPS
+# proxy applicable to this request. A proxy carrying userinfo is refused
+# unconditionally as invalid input, in this early validation pass beside --host:
+# no resolver answer, absent curl, or other early outcome may end the run first.
+# NO_PROXY is not emulated, so no bypass entry can turn that refusal off and let
+# a credential reach a proxy while the route says direct.
+proxy_env_value() {
+  local upper=$1 lower=$2 value
+  eval 'value=${'"$lower"'-}'
+  if [ -n "$value" ]; then printf '%s' "$value"; return; fi
+  eval 'value=${'"$upper"'-}'
+  printf '%s' "$value"
+}
+PROXY_MODE=direct
+proxy_value=$(proxy_env_value HTTPS_PROXY https_proxy)
+[ -n "$proxy_value" ] || proxy_value=$(proxy_env_value ALL_PROXY all_proxy)
+if [ -n "$proxy_value" ]; then
+  PROXY_MODE=via-proxy
+  proxy_authority=${proxy_value#*://}
+  proxy_authority=${proxy_authority%%[/?#]*}
+  case "$proxy_authority" in
+    *@*) die_input "proxy URL carries credentials: the probe never sends one" ;;
+  esac
 fi
 
 # Bounded execution is owned by bin/fm-timeout-lib.sh, so a macOS host without
@@ -176,16 +267,166 @@ fi
 # shellcheck disable=SC1091
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fm-timeout-lib.sh"
 
+# An authority that cannot become a valid https authority is a caller error, so
+# IP literals are validated by value, not only by shape: curl's own rejection of
+# a bad address would otherwise be reported as an endpoint outage.
+ipv4_literal_ok() {
+  local rest=$1 dots o1 o2 o3 o4 octet
+  case "$rest" in
+    ''|*[!0-9.]*) return 1 ;;
+  esac
+  dots=${rest//[^.]/}
+  [ "${#dots}" -eq 3 ] || return 1
+  o1=${rest%%.*}; rest=${rest#*.}
+  o2=${rest%%.*}; rest=${rest#*.}
+  o3=${rest%%.*}; o4=${rest#*.}
+  for octet in "$o1" "$o2" "$o3" "$o4"; do
+    case "$octet" in
+      ''|*[!0-9]*|0?*) return 1 ;;
+    esac
+    [ "${#octet}" -le 3 ] || return 1
+    [ "$octet" -le 255 ] || return 1
+  done
+  return 0
+}
+
+# Sets LITERAL_GROUPS to the number of 16-bit groups $1 contributes to an IPv6
+# address, or fails when a group is not 1-4 hex digits or a dotted quad is
+# misplaced. $2 allows a trailing dotted quad, which is only legal after every
+# hex group.
+ipv6_side_groups() {
+  local side=$1 allow_v4=$2 part i=0 count
+  local -a groups=()
+  LITERAL_GROUPS=0
+  [ -n "$side" ] || return 0
+  IFS=':' read -ra groups <<< "$side"
+  count=${#groups[@]}
+  while [ "$i" -lt "$count" ]; do
+    part=${groups[$i]}
+    case "$part" in
+      *.*)
+        [ "$allow_v4" = 1 ] && [ "$i" -eq $((count - 1)) ] || return 1
+        ipv4_literal_ok "$part" || return 1
+        LITERAL_GROUPS=$((LITERAL_GROUPS + 2))
+        ;;
+      *)
+        case "$part" in
+          ''|*[!0-9A-Fa-f]*) return 1 ;;
+        esac
+        [ "${#part}" -le 4 ] || return 1
+        LITERAL_GROUPS=$((LITERAL_GROUPS + 1))
+        ;;
+    esac
+    i=$((i + 1))
+  done
+  return 0
+}
+
+ipv6_literal_ok() {
+  local addr=$1 left right left_groups
+  case "$addr" in
+    *::*)
+      left=${addr%%::*}
+      right=${addr#*::}
+      case "$right" in *::*) return 1 ;; esac
+      ipv6_side_groups "$left" 0 || return 1
+      left_groups=$LITERAL_GROUPS
+      ipv6_side_groups "$right" 1 || return 1
+      [ $((left_groups + LITERAL_GROUPS)) -le 7 ] || return 1
+      return 0
+      ;;
+  esac
+  ipv6_side_groups "$addr" 1 || return 1
+  [ "$LITERAL_GROUPS" -eq 8 ]
+}
+
 case "$HOST_ARG" in
   *\?*) die_input "query component is not supported" ;;
 esac
+# curl never sends a fragment, so accepting one would probe a different path than
+# the caller wrote while the probe label omits the path entirely.
 case "$HOST_ARG" in
-  *@*) die_input "--host must not contain userinfo" ;;
+  *'#'*) die_input "fragment component is not supported" ;;
+esac
+# A credential belongs to no probe: userinfo (`user:pass@host`) is refused before
+# anything else looks at the value, so it can never be composed into a request or
+# echoed back. The refusal names only the shape, never the supplied text.
+case "$HOST_ARG" in
+  *@*) die_input "--host must not carry credentials (userinfo): name the host only; the probe never sends one" ;;
 esac
 if [[ "$HOST_ARG" =~ ^[A-Za-z][A-Za-z0-9+.-]*:// ]]; then
   die_input "--host must be a host[:port][/path], not a URL"
 fi
-BASE=https://$HOST_ARG
+# Whitespace and control characters cannot appear unescaped in a request URL,
+# and a space in the authority would also break the one-line probe framing.
+case "$HOST_ARG" in
+  *[[:space:][:cntrl:]]*) die_input "--host must not contain whitespace or control characters" ;;
+esac
+
+# Split the authority from any path, then normalize an IPv6 literal into the
+# bracketed form a URL authority requires. A bare literal is what a resolver and
+# the OS accept, so `--host 2001:db8::1` is a reasonable thing to type; building
+# `https://2001:db8::1` from it would hand curl a malformed authority and report
+# a connection failure for a target that was never actually requested.
+HOST_PATH=''
+case "$HOST_ARG" in
+  */*) HOST_PATH=/${HOST_ARG#*/} ;;
+esac
+HOST_AUTH=${HOST_ARG%%/*}
+# A port or bracket shape that cannot become a valid https authority is a caller
+# error, never an endpoint finding: refusing it here keeps curl's own URL
+# rejection from being reported as result=unreachable.
+AUTH_PORT=''
+AUTH_PORT_SET=0
+case "$HOST_AUTH" in
+  '['*)
+    bracket_tail=${HOST_AUTH#\[}
+    case "$bracket_tail" in
+      *']'*) v6_literal=${bracket_tail%%\]*}; bracket_tail=${bracket_tail#*\]} ;;
+      *) die_input "--host has an unterminated IPv6 bracket: write [address] or [address]:port" ;;
+    esac
+    ipv6_literal_ok "$v6_literal" || die_input "--host bracketed value is not an IPv6 literal"
+    case "$bracket_tail" in
+      '') ;;
+      :*) AUTH_PORT_SET=1; AUTH_PORT=${bracket_tail#:} ;;
+      *) die_input "--host has text after the IPv6 bracket: write [address] or [address]:port" ;;
+    esac
+    URL_AUTH="[$v6_literal]"
+    ;;
+  *)
+    # Two or more colons cannot be host:port, so the value is an IPv6 literal.
+    host_colons=${HOST_AUTH//[^:]/}
+    if [ "${#host_colons}" -ge 2 ]; then
+      ipv6_literal_ok "$HOST_AUTH" || die_input "--host has more than one colon but is not an IPv6 literal: bracket an IPv6 address or write one host:port"
+      URL_AUTH="[$HOST_AUTH]"
+    else
+      case "$HOST_AUTH" in
+        *:*) AUTH_PORT_SET=1; AUTH_PORT=${HOST_AUTH#*:}; HOST_ONLY=${HOST_AUTH%%:*} ;;
+        *) HOST_ONLY=$HOST_AUTH ;;
+      esac
+      if [ "$AUTH_PORT_SET" = 1 ] && [ -z "$HOST_ONLY" ]; then
+        die_input "--host must name a host before its port"
+      fi
+      case "$HOST_ONLY" in
+        *[!A-Za-z0-9._-]*) die_input "--host name may contain only ASCII letters, digits, dots, hyphens, and underscores (or be a bracketed IPv6 literal)" ;;
+      esac
+      case "$HOST_ONLY" in
+        ''|*[!0-9.]*) ;;
+        *.*) ipv4_literal_ok "$HOST_ONLY" || die_input "--host dotted address must be four octets from 0 to 255" ;;
+      esac
+      URL_AUTH=$HOST_ONLY
+    fi
+    ;;
+esac
+if [ "$AUTH_PORT_SET" = 1 ]; then
+  case "$AUTH_PORT" in
+    ''|0*|*[!0-9]*) die_input "--host port must be a number from 1 to 65535" ;;
+  esac
+  [ "${#AUTH_PORT}" -le 5 ] || die_input "--host port must be a number from 1 to 65535"
+  [ "$AUTH_PORT" -le 65535 ] || die_input "--host port must be a number from 1 to 65535"
+  URL_AUTH="$URL_AUTH:$AUTH_PORT"
+fi
+BASE=https://$URL_AUTH$HOST_PATH
 
 # A --host value with no host part cannot yield a request authority: that is a
 # caller error, never a healthy probe, so it gets its own verdict before any
@@ -233,8 +474,16 @@ DETAIL=''
 # and `command -v "dig host"` fails while dig itself sits right there on PATH.
 # A pre-gate over the combined string silently skipped the resolver that was
 # actually installed and reported a lookup that never ran as dns=skipped.
+dns_rcode() {
+  local tool=$1 out=$2
+  case "$tool" in
+    dig) printf '%s\n' "$out" | sed -nE 's/^(;;.*status:|status:)[[:space:]]*([A-Za-z]+).*/\2/p' | head -n 1 | tr '[:lower:]' '[:upper:]' ;;
+    host) printf '%s\n' "$out" | sed -nE 's/^Host .*not found:[[:space:]]*[0-9]+\(([A-Za-z]+)\).*/\1/p' | head -n 1 | tr '[:lower:]' '[:upper:]' ;;
+  esac
+}
+
 dns_probe() {
-  local tool out rc first answer saw_error=0 error_detail=''
+  local tool out rc answer rcode saw_error=0 error_detail=''
   local -a tools=()
   # The override is one tool or a whitespace-separated preference list; unset
   # means this host's own candidates in order. `read -ra` splits on IFS without
@@ -262,22 +511,22 @@ dns_probe() {
       error_detail="timeout_after_${TIMEOUT}s"
       continue
     fi
-    first=$(printf '%s\n' "$out" | head -n 1)
-    # The resolver-error patterns are checked first because BIND `host` renders
-    # every non-NXDOMAIN rcode with the same "not found" wording, e.g.
-    # `Host name not found: 2(SERVFAIL)`. Testing "not found" first would label a
-    # resolver error as a successful no-address answer.
-    if printf '%s\n' "$out" | grep -qiE 'SERVFAIL|FORMERR|REFUSED|timed out'; then
-      saw_error=1
-      error_detail="rc=${rc}"
-      continue
-    fi
-    # NXDOMAIN is terminal. An A-query with no answer is not: the hostname may
-    # be IPv6-only, so ask dig for AAAA before deciding whether DNS found nothing.
-    if printf '%s\n' "$out" | grep -qi 'NXDOMAIN'; then
-      printf 'nxdomain %s\n' "${first:-no-address}"
-      return 0
-    fi
+    # The rcode is read from the resolver's header syntax only. An answer record
+    # can legitimately contain a name such as `nxdomain.example.com`, and
+    # scanning the whole output for rcode words misclassified that answer as a
+    # lookup failure or a no-address reply.
+    rcode=$(dns_rcode "${tool##*/}" "$out")
+    case "$rcode" in
+      SERVFAIL|FORMERR|REFUSED)
+        saw_error=1
+        error_detail="rc=${rc}"
+        continue
+        ;;
+      NXDOMAIN)
+        printf 'nxdomain %s\n' "$rcode"
+        return 0
+        ;;
+    esac
     if [ "$rc" -ne 0 ]; then
       saw_error=1
       error_detail="rc=${rc}"
@@ -310,19 +559,22 @@ dns_probe() {
           error_detail="timeout_after_${TIMEOUT}s"
           continue
         fi
-        if printf '%s\n' "$out" | grep -qiE 'SERVFAIL|FORMERR|REFUSED|timed out'; then
-          saw_error=1
-          error_detail="rc=${rc}"
-          continue
-        fi
+        rcode=$(dns_rcode dig "$out")
+        case "$rcode" in
+          SERVFAIL|FORMERR|REFUSED)
+            saw_error=1
+            error_detail="rc=${rc}"
+            continue
+            ;;
+          NXDOMAIN)
+            printf 'nxdomain %s\n' "$rcode"
+            return 0
+            ;;
+        esac
         if [ "$rc" -ne 0 ]; then
           saw_error=1
           error_detail="rc=${rc}"
           continue
-        fi
-        if printf '%s\n' "$out" | grep -qi 'NXDOMAIN'; then
-          printf 'nxdomain %s\n' "${first:-no-address}"
-          return 0
         fi
         answer=$(printf '%s\n' "$out" | awk '
           /^;; [A-Z]+ SECTION:/ { sections=1; inside=($0 ~ /^;; ANSWER SECTION:/); next }
@@ -332,61 +584,57 @@ dns_probe() {
           printf 'ok %s\n' "$answer"
           return 0
         fi
-        if [ "$rc" -ne 0 ]; then
-          saw_error=1
-          error_detail="rc=${rc}"
-          continue
+        if [ "$rcode" = NOERROR ] ||
+          printf '%s\n' "$out" | grep -qiE 'no address|no records|has no'; then
+          printf 'nxdomain no-address\n'
+          return 0
         fi
-        if ! { printf '%s\n' "$out" | grep -qi 'status: NXDOMAIN' ||
-          { printf '%s\n' "$out" | grep -qi 'status: NOERROR' && printf '%s\n' "$out" | grep -qi 'ANSWER: 0'; } ||
-          printf '%s\n' "$out" | grep -qi 'no addresses'; }; then
-          saw_error=1
-          error_detail="rc=${rc}"
-          continue
-        fi
+        saw_error=1
+        error_detail="rc=${rc}"
+        continue
         ;;
       host)
-        out=$(fm_run_timed "$TIMEOUT" "$tool" "$DNS_HOST" -t AAAA 2>/dev/null </dev/null) && rc=0 || rc=$?
+        out=$(fm_run_timed "$TIMEOUT" "$tool" -t AAAA "$DNS_HOST" 2>/dev/null </dev/null) && rc=0 || rc=$?
         if [ "$rc" -eq 124 ]; then
           saw_error=1
           error_detail="timeout_after_${TIMEOUT}s"
           continue
         fi
-        if printf '%s\n' "$out" | grep -qiE 'SERVFAIL|FORMERR|REFUSED|timed out'; then
-          saw_error=1
-          error_detail="rc=${rc}"
-          continue
-        fi
+        rcode=$(dns_rcode host "$out")
+        case "$rcode" in
+          SERVFAIL|FORMERR|REFUSED)
+            saw_error=1
+            error_detail="rc=${rc}"
+            continue
+            ;;
+          NXDOMAIN)
+            printf 'nxdomain %s\n' "$rcode"
+            return 0
+            ;;
+        esac
         if [ "$rc" -ne 0 ]; then
           saw_error=1
           error_detail="rc=${rc}"
           continue
-        fi
-        if printf '%s\n' "$out" | grep -qi 'NXDOMAIN'; then
-          printf 'nxdomain %s\n' "${first:-no-address}"
-          return 0
         fi
         answer=$(printf '%s\n' "$out" | grep -E 'has address|IPv6 address' | grep -E '[0-9a-fA-F]*:[0-9a-fA-F:]+' | head -n 1)
         if [ -n "$answer" ]; then
           printf 'ok %s\n' "$answer"
           return 0
         fi
-        if [ "$rc" -ne 0 ]; then
-          saw_error=1
-          error_detail="rc=${rc}"
-          continue
+        if printf '%s\n' "$out" | grep -qiE 'not found|no .*records|has no'; then
+          printf 'nxdomain no-address\n'
+          return 0
         fi
-        if ! printf '%s\n' "$out" | grep -qiE 'not found|no .*records|has no'; then
-          saw_error=1
-          error_detail="rc=${rc}"
-          continue
-        fi
+        saw_error=1
+        error_detail="rc=${rc}"
+        continue
         ;;
     esac
     # A successful but unfamiliar resolver is not proof that the name has no
     # address. Only explicitly recognized negative evidence may end the search.
-    if printf '%s\n' "$out" | grep -qiE 'NXDOMAIN|NOERROR-NODATA|no address|no records|has no' ||
-      { printf '%s\n' "$out" | grep -qi 'status: NOERROR' && printf '%s\n' "$out" | grep -qi 'ANSWER: 0'; }; then
+    if printf '%s\n' "$out" | grep -qiE 'status:[[:space:]]*NXDOMAIN|\(NXDOMAIN\)|NOERROR-NODATA|no address|no records|has no' ||
+      { printf '%s\n' "$out" | grep -qi 'status:[[:space:]]*NOERROR' && printf '%s\n' "$out" | grep -qi 'ANSWER: 0'; }; then
       printf 'nxdomain no-address\n'
       return 0
     fi
@@ -421,7 +669,6 @@ if [ "$DNS" = nxdomain ]; then
 fi
 if [ "$DNS" = fail ]; then
   DNS=unknown
-  DETAIL="${DETAIL/dns_detail=/dns_detail=}"
 fi
 
 # ---- phase 2: one unauthenticated HTTP request -------------------------------
@@ -438,76 +685,6 @@ command -v "$CURL_CMD" >/dev/null 2>&1 || {
   exit 64
 }
 
-# Curl honors proxy environment variables even with -q. Select only the HTTPS
-# proxy applicable to this request, and account for curl's no-proxy bypass before
-# refusing credentials or describing the route.
-proxy_env_value() {
-  local upper=$1 lower=$2 value
-  eval 'value=${'"$lower"'-}'
-  if [ -n "$value" ]; then printf '%s' "$value"; return; fi
-  eval 'value=${'"$upper"'-}'
-  printf '%s' "$value"
-}
-PROXY_MODE=direct
-proxy_host=$AUTHORITY
-case "$AUTHORITY" in
-  \[*\]*)
-    proxy_host=${AUTHORITY#\[}; proxy_host=${proxy_host%%\]*}
-    ;;
-  *:*) proxy_host=${AUTHORITY%:*} ;;
-esac
-no_proxy_list=$(proxy_env_value NO_PROXY no_proxy)
-no_proxy_bypass=0
-noglob_was_set=0
-case "$-" in *f*) noglob_was_set=1 ;; esac
-set -f
-old_ifs=$IFS; IFS=,
-for no_proxy_entry in $no_proxy_list; do
-  no_proxy_entry=${no_proxy_entry//[[:space:]]/}
-  [ -n "$no_proxy_entry" ] || continue
-  if [ "$no_proxy_entry" = '*' ]; then no_proxy_bypass=1; continue; fi
-  entry_port=''
-  case "$no_proxy_entry" in
-    \[*\]*)
-      entry_host=${no_proxy_entry#\[}; entry_host=${entry_host%%\]*}
-      entry_suffix=${no_proxy_entry#*\]}
-      case "$entry_suffix" in :*) entry_port=${entry_suffix#:} ;; esac
-      ;;
-    *:*) entry_host=${no_proxy_entry%:*}; entry_port=${no_proxy_entry##*:} ;;
-    *) entry_host=$no_proxy_entry ;;
-  esac
-  # curl's NO_PROXY matching does not honor port-qualified entries; treating
-  # one as a bypass could send a credentialed proxy request unexpectedly.
-  if [ -n "$entry_port" ] || [ "${no_proxy_entry%:*}" != "$no_proxy_entry" ]; then
-    continue
-  fi
-  entry_host=${entry_host#.}
-  # Quote the entry in the suffix pattern: NO_PROXY values are data, not
-  # shell globs. This accepts literal exact hosts and domain suffixes only.
-  case "$proxy_host" in
-    "$entry_host"|*."$entry_host") no_proxy_bypass=1 ;;
-  esac
-done
-IFS=$old_ifs
-[ "$noglob_was_set" -eq 1 ] || set +f
-if [ "$no_proxy_bypass" = 0 ]; then
-  proxy_value=$(proxy_env_value HTTPS_PROXY https_proxy)
-  [ -n "$proxy_value" ] || proxy_value=$(proxy_env_value ALL_PROXY all_proxy)
-  if [ -n "$proxy_value" ]; then
-    PROXY_MODE=via-proxy
-    proxy_authority=${proxy_value#*://}
-    proxy_authority=${proxy_authority%%[/?#]*}
-    case "$proxy_authority" in
-      *@*)
-        proxy_userinfo=${proxy_authority%%@*}
-        if [ -n "$proxy_userinfo" ]; then
-          printf 'probe=%s dns=%s http=none result=invalid-input proxy URL carries credentials\\n' "$PROBE" "$DNS"
-          exit 2
-        fi
-        ;;
-    esac
-  fi
-fi
 DETAIL="${DETAIL} route=$PROXY_MODE"
 
 # The response body is irrelevant to the fact being collected and is discarded to
