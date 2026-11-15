@@ -1,0 +1,24 @@
+# Live drive: nm-manual no-mistakes ship brief, rendered by the real bin/fm-brief.sh in a disposable lab home
+$ FM_HOME=<lab> bin/fm-brief.sh nm-manual some-proj --mode no-mistakes --pr manual
+
+----- Definition of done (head: contract + shared handoff notice) -----
+# Definition of done
+Delivery contract: mode=no-mistakes pr=manual
+Ship branch: fm/nm-manual
+This project's pull-request text is written by hand: the pipeline's `pr` step would rewrite the title and body you write on every validated push, so **no-mistakes runs here as a validation pass that pushes the branch**, and you then open the PR yourself.
+Pass `--skip pr,ci` on every `no-mistakes axi run` for this task, and skip nothing else: `review`, `test`, `document`, `lint`, and `push` still run, and `ci` has no pipeline-opened PR to watch.
+When the work is committed, append `done [at=<epoch>]: {summary}` to the status file and stop.
+Firstmate will then instruct you to run /no-mistakes to validate and push.
+That first `done:` is not a request to push from this copy.
+`done: {summary}` never reports this task complete: it only hands control to the pipeline.
+Append that handoff `done: {summary}` when the work is committed: it is required, and it is not completion.
+The only `done:` that completes this task is `done: PR <url> checks green`; a `done:` reporting a commit, a branch, or a pushed branch leaves the task unfinished.
+After that handoff, never report a later stage as `done: {summary}`: a stage short of that report is not a result.
+
+
+[... shared no-mistakes driving block and firstmate rules omitted ...]
+
+----- Definition of done (tail: the shape's one completing report) -----
+Then append `done [at=<epoch>]: PR {url} checks green` and stop. You are finished.
+That CI-ready `done:` is accepted only when this copy's HEAD - your latest commit - is one the /no-mistakes run pushed, so commit nothing after the last run; the check tests that commit, not merely that a branch moved.
+If you deliberately keep the PR a draft, append `paused [at=<epoch>]: {why the draft is held}` instead of done.

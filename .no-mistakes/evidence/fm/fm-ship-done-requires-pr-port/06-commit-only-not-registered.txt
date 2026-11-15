@@ -1,0 +1,16 @@
+# Adversarial: a commit-only report cannot be registered as a completed/delivered ship task
+
+Two real task records in the disposable lab home, both mode=no-mistakes kind=ship:
+  commitonly.status -> done [at=1794712438]: committed a417350
+  readypr.status    -> done [at=1794712449]: PR https://github.com/o/r/pull/123 checks green
+
+$ FM_HOME=<lab> FM_CHECK_TIMEOUT=40 bin/fm-pr-check.sh scan
+readypr reported https://github.com/o/r/pull/123 in a done line, but it was not recorded: named head a4173504404374d08edafe8ad375137c688b62de is unreachable outside the worker copy; could not refresh remote: origin, so this verdict used the last-known refs and the work may be there; retry once the remote is reachable
+
+----- persisted state after the scan -----
+commitonly: 0 recorded pr= line(s); merge-watch artifacts: 0
+readypr:    0 recorded pr= line(s); refusal marker: https://github.com/o/r/pull/123
+
+Interpretation: the commit-only done is not a PR-ready report at all (nothing recorded, no merge watch armed),
+while the same scanner does pick up a real 'checks green' report and refuses to record it because that head is not
+reachable outside the worker copy - so completion still requires the pushed PR, exactly as the corrected brief says.

@@ -1,0 +1,12 @@
+# Adversarial boundary: modes this change must not touch render identically
+
+Scaffolded the same task ids/flags on the base tree (427056c4) and this change, in two separate
+disposable lab homes, then diffed only the '# Definition of done' section of each brief.
+
+## dp (--mode direct-PR)
+Definition of done is byte-identical between base and this change.
+
+## loc (--mode local-only)
+Definition of done is byte-identical between base and this change.
+
+(The only full-brief differences were the lab home path in the status/inbox commands and the repo root path, which differ by construction.)

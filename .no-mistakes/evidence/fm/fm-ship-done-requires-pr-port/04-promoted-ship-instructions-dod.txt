@@ -1,0 +1,25 @@
+# Live drive: promoting a scout (real bin/fm-promote.sh) hands the already-running worker the same corrected contract
+$ FM_HOME=<lab> bin/fm-promote.sh scout1 --mode no-mistakes --yolo off
+$ cat <lab>/data/scout1/ship-instructions.md
+
+----- ship-instructions.md: Definition of done head -----
+# Definition of done
+Delivery contract: mode=no-mistakes
+Ship branch: fm/scout1
+When the work is committed, append `done [at=<epoch>]: {summary}` to the status file and stop.
+Firstmate will then instruct you to run /no-mistakes to validate and ship a PR.
+That first `done:` is not a request to push from this copy.
+`done: {summary}` never reports this task complete: it only hands control to the pipeline.
+Append that handoff `done: {summary}` when the work is committed: it is required, and it is not completion.
+The only `done:` that completes this task is `done: PR <url> checks green`; a `done:` reporting a commit, a branch, or a pushed branch leaves the task unfinished.
+After that handoff, never report a later stage as `done: {summary}`: a stage short of that report is not a result.
+
+
+----- the same notice is appended to the relaunch brief.md -----
+132:The only `done:` that completes this task is `done: PR <url> checks green`; a `done:` reporting a commit, a branch, or a pushed branch leaves the task unfinished.
+131:Append that handoff `done: {summary}` when the work is committed: it is required, and it is not completion.
+
+----- promoted ship instructions: the old defect and the rejected phrasings -----
+absent: The task is complete only when committed on your branch.
+absent: a commit is not a result to report
+absent: Before that handoff

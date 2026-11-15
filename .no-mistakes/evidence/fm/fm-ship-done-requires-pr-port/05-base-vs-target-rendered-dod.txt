@@ -1,0 +1,31 @@
+# Adversarial: before vs after the change, rendered by the real bin/fm-brief.sh on both trees
+
+## Base commit 427056c4 (pre-change) - ship brief, mode=no-mistakes
+$ <base tree>/bin/fm-brief.sh base-std some-proj --mode no-mistakes
+# Definition of done
+Delivery contract: mode=no-mistakes
+Ship branch: fm/base-std
+The task is complete only when committed on your branch.
+When you believe it is complete, append `done [at=<epoch>]: {summary}` to the status file and stop.
+Firstmate will then instruct you to run /no-mistakes to validate and ship a PR.
+That first `done:` is the handoff that starts the pipeline, which owns the push; it is not a request to push from this copy.
+
+
+## Target commit dcc82694 (this change) - ship brief, mode=no-mistakes
+$ bin/fm-brief.sh nm-std some-proj --mode no-mistakes
+# Definition of done
+Delivery contract: mode=no-mistakes
+Ship branch: fm/nm-std
+When the work is committed, append `done [at=<epoch>]: {summary}` to the status file and stop.
+Firstmate will then instruct you to run /no-mistakes to validate and ship a PR.
+That first `done:` is not a request to push from this copy.
+`done: {summary}` never reports this task complete: it only hands control to the pipeline.
+Append that handoff `done: {summary}` when the work is committed: it is required, and it is not completion.
+The only `done:` that completes this task is `done: PR <url> checks green`; a `done:` reporting a commit, a branch, or a pushed branch leaves the task unfinished.
+After that handoff, never report a later stage as `done: {summary}`: a stage short of that report is not a result.
+
+
+## Observed difference
+- base: 'The task is complete only when committed on your branch.' - a commit-only done IS completion in the brief's own words (the reported defect).
+- target: that sentence is gone; the commit-time done is named a required handoff that is explicitly not completion, the shape's PR report is the only completing done, and later stages may not be reported as done.
+- Neither tree both requires and forbids the commit-time done: target says 'When the work is committed, append ... and stop' and never says a commit is not a result to report.
