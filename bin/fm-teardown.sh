@@ -123,6 +123,19 @@
 # name a live quarantined space and is retained for that sweep.
 # data/<id>/ is deliberately left in place: a successor spawn reads brief.md
 # from it.
+# The watcher's per-window timer markers (state/.hash-, .count-, .stale-,
+# .stale-since-, .wedge-escalations-, and their siblings) are keyed by the
+# recorded backend endpoint rather than by the task id, so they are retired from
+# bin/fm-watch-key-lib.sh's family inventory - both its current `v3.` and its
+# legacy key form - and never from the task-id lists elsewhere in this script.
+# Both the current endpoint and the one a relaunch abandoned for this same task
+# are retired with it; a leftover .stale-since- and .wedge-escalations- pair is a
+# live wedge episode with no window behind it, so the watcher keeps ageing that
+# counter and re-alerting about work that is already gone. Only this task's own
+# windows are touched: a marker keyed by another endpoint may belong to a live
+# worker. After a successful teardown the same inventory is used to sweep the
+# home's LEGACY-form families whose endpoint no recorded task owns, which is the
+# only population nothing else can ever prove dead.
 # Worktree-slot ownership (teardown-slot-collision): a treehouse pool slot is
 # reused across tasks, so a stale, duplicated, or drifted worktree= record can
 # name a slot a DIFFERENT live task now holds. Cleanup kills every process under
@@ -390,6 +403,7 @@ for _teardown_source in \
   fm-control-lib.sh \
   fm-lock-lib.sh \
   fm-classify-lib.sh \
+  fm-watch-key-lib.sh \
   fm-gate-refuse-lib.sh \
   fm-pr-lib.sh \
   fm-public-followup-lib.sh \
@@ -424,6 +438,11 @@ unset _teardown_source
 . "$SCRIPT_DIR/fm-control-lib.sh"
 # shellcheck source=bin/fm-lock-lib.sh
 . "$SCRIPT_DIR/fm-lock-lib.sh"
+# Per-window watcher marker identity and the family inventory a retired
+# endpoint's timer markers are enumerated from (bin/fm-watch-key-lib.sh owns
+# both, for the watcher, the away daemon, and this cleanup).
+# shellcheck source=bin/fm-watch-key-lib.sh
+. "$SCRIPT_DIR/fm-watch-key-lib.sh"
 # shellcheck source=bin/fm-gate-refuse-lib.sh
 . "$SCRIPT_DIR/fm-gate-refuse-lib.sh"
 # shellcheck source=bin/fm-pr-lib.sh
@@ -3545,6 +3564,134 @@ endpoint_close_refusal() {  # <subject> <backend> <target> <honors-force>
   return 1
 }
 
+# teardown_retire_window_timer_markers: remove the watcher's per-window timer
+# family for THIS task's recorded endpoint.
+#
+# Those markers are keyed by the endpoint, not by the task id, so every other
+# cleanup list in this script misses them entirely: state/.hash-, .count-,
+# .stale-, .stale-since-, .wedge-escalations-, and their siblings accumulated one
+# set per retired window with nothing ever removing one (measured 240 families,
+# oldest three months). The cost is not disk: a leftover .stale-since- plus
+# .wedge-escalations- pair is a live wedge episode with no window behind it, and
+# the watcher keeps ageing its escalation counter and re-alerting about work that
+# finished - observed as a task escalating to level 10 every 4-6 minutes for two
+# hours after its record, copy, and backlog row were already gone.
+#
+# The family list is bin/fm-watch-key-lib.sh's inventory, not a copy, so a family
+# added there is retired here without a second edit. Both key forms are removed:
+# the current v3 one and the pre-migration suffix an upgraded home still carries.
+#
+# A relaunch reuses the recorded endpoint (bin/fm-spawn.sh --relaunch), so the
+# current endpoint is the only window this record ever owned; a genuinely
+# different window means a different endpoint, which is a different record. A
+# record left behind by a relaunch that moved windows keeps its prior window in
+# state/<id>.control-relaunch.meta-prior - stale evidence bin/fm-backend.sh warns
+# an operator against trusting - so its window is read as well when, and only
+# when, that file still names this same task.
+#
+# Only a task's own window is touched: a marker keyed by any other endpoint may
+# belong to a live task, and erasing it would reset that worker's escalation
+# history and silence a genuine wedge. $T empty (a windowless legacy record)
+# removes nothing.
+#
+teardown_window_of_prior_record() {  # <path>
+  local prior=$1 owner window
+  [ -f "$prior" ] && [ ! -L "$prior" ] || return 0
+  owner=$(fm_meta_get "$prior" endpoint_task_id)
+  [ -n "$owner" ] || owner=$(fm_meta_get "$prior" task_id)
+  [ "$owner" = "$ID" ] || return 0
+  window=$(fm_backend_target_of_meta "$prior")
+  [ -n "$window" ] || window=$(fm_meta_get "$prior" window)
+  [ -n "$window" ] || return 0
+  printf '%s' "$window"
+}
+
+teardown_retire_window_timer_markers() {  # <state-dir> <window>
+  local state=$1 window=$2 name
+  [ -n "$window" ] || return 0
+  [ -d "$state" ] && [ ! -L "$state" ] || return 0
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    rm -f -- "$state/$name" || return 1
+  done < <(window_marker_names "$window")
+}
+
+# teardown_prune_orphan_window_timer_markers: retire per-window timer families
+# whose window no recorded task in this home owns any more.
+#
+# The per-task retirement above stops new leftovers; this drains the backlog a
+# home already carries, so an operator does not have to hand-delete a marked
+# family and risk the live ones. It runs under the home's task-set lock, which
+# serializes it against spawn's record publication: a window whose record has not
+# been published yet is invisible to the enumeration, so without that lock a
+# fresh task's markers could be judged orphaned and erased moments before its own
+# record landed.
+#
+# Scope is deliberately the LEGACY key form only. Determining a v3 key's endpoint
+# would mean hashing candidates, while a legacy-form family already spells its
+# endpoint in its own filename - and that form is exactly the population nothing
+# else can ever prove dead, since today's watcher never writes it again. Every
+# legacy family whose window no live record names is unambiguous rubbish. It is
+# removed only when the window encoded in the filename does not resolve to any
+# recorded endpoint, so a live task's migrated-away markers are never touched.
+#
+# Ownership is decided by re-deriving each recorded endpoint's legacy form and
+# comparing it whole: a legacy key turns `:`, `/`, and `.` into underscores, so a
+# prefix match alone cannot say which endpoint a filename encodes.
+#
+# One task-keyed marker borrows a window family's prefix and is NOT a window
+# marker: .paused-overdue-<task-id> is retired with its task by
+# teardown_retire_status. It is skipped by name rather than by prefix so a future
+# window family with the same shape cannot ride in on the exemption.
+#
+teardown_prune_orphan_window_timer_markers() {  # <state-dir>
+  local state=$1 lock prefix family base candidate window owner killed=0
+  local -a recorded=()
+  [ -d "$state" ] && [ ! -L "$state" ] || return 0
+  lock=$(fm_task_set_lock_path "$state") || return 0
+  fm_lock_acquire_wait "$lock" || {
+    echo "warning: could not lock $state to prune orphan window timers; leaving them in place" >&2
+    return 0
+  }
+  # Every endpoint any recorded task in this home names. Read under the lock so a
+  # spawn publishing a record cannot race this into erasing its fresh markers.
+  for window in "$state"/*.meta; do
+    [ -f "$window" ] && [ ! -L "$window" ] || continue
+    candidate=$(fm_backend_target_of_meta "$window")
+    [ -n "$candidate" ] || continue
+    recorded+=("$candidate")
+  done
+  for family in "$state"/.*; do
+    [ -f "$family" ] && [ ! -L "$family" ] || continue
+    base=${family##*/}
+    base=${base#.}
+    # A current-form name carries its own key and is never a legacy candidate.
+    case "$base" in *-v3.*) continue ;; esac
+    # Task-keyed, not window-keyed (its owner retires it with the task).
+    case "$base" in paused-overdue-*) continue ;; esac
+    candidate=
+    while IFS= read -r prefix; do
+      [ -n "$prefix" ] || continue
+      case "$base" in "$prefix-"*) candidate=${base#"$prefix-"}; break ;; esac
+    done < <(window_marker_prefixes)
+    [ -n "$candidate" ] || continue
+    # A family whose encoded endpoint still maps to a recorded window belongs to
+    # a live task and stays. Any recorded endpoint whose legacy form equals the
+    # candidate is exactly that; a name that maps to none is unambiguously
+    # rubbish because no live window can ever write that form again.
+    owner=0
+    for window in "${recorded[@]+"${recorded[@]}"}"; do
+      [ "$(window_key_legacy "$window")" = "$candidate" ] || continue
+      owner=1
+      break
+    done
+    [ "$owner" -eq 0 ] || continue
+    rm -f -- "$family" && killed=$((killed + 1))
+  done
+  fm_lock_release "$lock"
+  [ "$killed" -eq 0 ] || echo "pruned $killed orphan window timer marker(s)"
+}
+
 cleanup_firstmate_home_children() {
   local home=$1 archive_parent=${2:-$ID} sub_state child_meta child_id child_t child_wt child_proj child_kind child_home child_rex_home child_backend child_orca_worktree_id child_return_rc child_busy_gen child_owner_rc child_pool_slot
   sub_state="$home/state"
@@ -3667,6 +3814,9 @@ cleanup_firstmate_home_children() {
     teardown_retire_status "$sub_state" "$child_id" "$archive_parent/children/$child_id" || return 1
     fm_wake_queue_prune_task "$sub_state" "$child_id" "$child_t" 2>/dev/null || true
     fm_backlog_atomic_transition remove "$sub_state/$child_id.meta" "task record" "$sub_state" || return 1
+    # The child's own per-window timer family, read from its record before the
+    # removal above and retired by the same shared inventory as its parent's.
+    teardown_retire_window_timer_markers "$sub_state" "$child_t" || return 1
     rm -f "$sub_state/$child_id.turn-ended" "$sub_state/$child_id.progress" \
       "$(fm_wake_signal_seen_path "$sub_state" "$sub_state/$child_id.turn-ended")" \
       "$sub_state/$child_id.pi-ext.ts" "$sub_state/$child_id.omp-ext.ts" \
@@ -4209,6 +4359,10 @@ retire_busy_state "$STATE" "$ID" "$BUSY_GEN" || exit 1
 [ ! -e "$CONFIG/fleet-ledger" ] || FM_HOME=$FM_HOME FM_STATE_OVERRIDE=$STATE FM_CONFIG_OVERRIDE=$CONFIG "$SCRIPT_DIR/fm-fleet-ledger.sh" cleaned_up "$ID" || true
 teardown_retire_status "$STATE" "$ID" || exit 1
 fm_wake_queue_prune_task "$STATE" "$ID" "$T" 2>/dev/null || true
+# Read the window a relaunch abandoned before the prior-record file is retired
+# with the rest of the relaunch journal below.
+TEARDOWN_PRIOR_WINDOW=$(teardown_window_of_prior_record "$STATE/$ID.control-relaunch.meta-prior") \
+  || TEARDOWN_PRIOR_WINDOW=
 rm -f "$STATE/$ID.turn-ended" "$STATE/$ID.progress" \
   "$(fm_wake_signal_seen_path "$STATE" "$STATE/$ID.turn-ended")" \
   "$STATE/$ID.pi-ext.ts" "$STATE/$ID.omp-ext.ts" "$STATE/$ID.grok-turnend-token" \
@@ -4223,6 +4377,15 @@ rm -f "$STATE/$ID.turn-ended" "$STATE/$ID.progress" \
   "$STATE/$ID.pr-register-timed-out" \
   "$STATE/.$ID.branch-outcome-index" \
   "$STATE/.secondmate-relaunch-$ID" "$STATE/.secondmate-relaunch-bound-$ID"
+# The watcher's per-window timer family is keyed by the endpoint rather than this
+# task id, so it is retired by the shared inventory in bin/fm-watch-key-lib.sh
+# instead of by the filename list above. The prior-record window covers a relaunch
+# that moved the task to a new one: a leftover family from a finished window is a
+# live wedge episode with no window behind it, and the watcher keeps ageing its
+# escalation counter and re-alerting about work that is already gone.
+teardown_retire_window_timer_markers "$STATE" "$T" || exit 1
+[ -z "$TEARDOWN_PRIOR_WINDOW" ] || [ "$TEARDOWN_PRIOR_WINDOW" = "$T" ] \
+  || teardown_retire_window_timer_markers "$STATE" "$TEARDOWN_PRIOR_WINDOW" || exit 1
 # kiro's per-task home is a directory (its relocated KIRO_HOME holds the hook
 # agent config, the trust setting, and this task's sessions), so it needs a
 # recursive removal rather than the file rm above.
@@ -4294,6 +4457,7 @@ if [ "$KIND" != scout ] && [ "$KIND" != secondmate ] && [ "$MODE" != local-only 
 fi
 # A secondmate retirement may remove the home containing an overridden control
 # state directory. Do not let the side-band refresh recreate that retired home.
+teardown_prune_orphan_window_timer_markers "$STATE" || true
 if [ -d "$STATE" ]; then
   "$SCRIPT_DIR/fm-home-summary-refresh.sh" --best-effort || true
 fi

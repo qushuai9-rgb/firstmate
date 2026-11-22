@@ -10,15 +10,28 @@
 # docs/configuration.md's watcher-marker upgrade note owns the intentional
 # one-time cache reset and its notification-only effects.
 #
+# window_marker_prefixes is THE inventory of the per-window marker families, and
+# window_marker_names renders one window's whole set from it. Every consumer that
+# has to enumerate a window's markers reads the inventory rather than repeating
+# the family list: a family missing from a copy outlives the window it belongs to,
+# and the timer it leaves behind keeps ageing against a window nobody supervises.
+#
+# Two key forms exist and both must be retired WITH their window, because a
+# window name is never revived and nothing else can ever prove such a file dead:
+#   - window_key: the current `v3.` suffix, which the watcher and away daemon
+#     write every family under today;
+#   - window_key_legacy: the pre-migration suffix that only turned `:` and `/`
+#     and `.` into `_`. A home upgraded across that change still carries these
+#     files, and the header below calls leaving them in place safe - only
+#     cleanup that knows the window is finished may remove them.
+#
 # Obsolete markers are not garbage-collected automatically. For optional cleanup,
 # stop both the watcher and away daemon, then archive the obsolete files outside
-# STATE (or remove the reviewed files). Limit this to per-endpoint marker families:
-# .hash-, .count-, .stale-, .stale-since-, .churn-since-, .dead-reported-,
-# .wedge-escalations-, .wedge-permanent-, .wedge-terminal-queued-,
-# .wedge-rollback-failed-, .paused-, .paused-rechecked-, .paused-resurfaced-,
-# .waiting-resurfaced-, .writing-since-, .writing-resurfaced-, .validating-since-,
-# .validating-resurfaced-, and .guard-deferrals-. Preserve every current filename
+# STATE (or remove the reviewed files). Limit this to the per-window marker
+# families window_marker_prefixes prints. Preserve every current filename
 # containing -v3.; only legacy/v2 suffixes in those families are obsolete.
+# bin/fm-teardown.sh retires a finished window's whole family, including its
+# legacy form, and prunes legacy-form families no recorded window owns.
 # Do not bulk-clear STATE: task records, wake queues, and task-keyed .subsuper-*
 # markers are outside this cleanup. Leaving obsolete files in place is safe.
 window_key() {  # <window>
@@ -29,4 +42,57 @@ window_key() {  # <window>
     digest=$(printf '%s' "$1" | sha256sum)
   fi
   printf 'v3.%s' "${digest%% *}"
+}
+
+# window_key_legacy: the pre-migration suffix for the same endpoint. Kept as the
+# one owner of that form so cleanup never re-derives it inline and drifts from
+# what an upgraded home's files actually carry.
+window_key_legacy() {  # <window>
+  local key=${1//:/_}
+  key=${key//\//_}
+  printf '%s' "${key//./_}"
+}
+
+# window_marker_prefixes: every per-window marker family filename prefix, one
+# per line, without the leading dot and without the key. Sorted longest-family-
+# first where one prefix is a prefix of another, so a caller that resolves a
+# filename by prefix does not need to know the overlap.
+window_marker_prefixes() {
+  printf '%s\n' \
+    hash \
+    count \
+    stale-since \
+    stale \
+    churn-since \
+    dead-reported \
+    wedge-escalations \
+    wedge-permanent \
+    wedge-terminal-queued \
+    wedge-rollback-failed \
+    paused-rechecked \
+    paused-resurfaced \
+    paused \
+    waiting-resurfaced \
+    writing-since \
+    writing-resurfaced \
+    validating-since \
+    validating-resurfaced \
+    guard-deferrals \
+    model-stream-episode
+}
+
+# window_marker_names: every per-window marker filename for ONE endpoint, one
+# per line with no directory, in both key forms. Callers join these with the
+# state directory they own.
+window_marker_names() {  # <window>
+  local win=$1 current legacy prefix
+  [ -n "$win" ] || return 1
+  current=$(window_key "$win") || return 1
+  legacy=$(window_key_legacy "$win")
+  [ -n "$legacy" ] && [ "$legacy" != "$current" ] || legacy=
+  while IFS= read -r prefix; do
+    [ -n "$prefix" ] || continue
+    printf '.%s-%s\n' "$prefix" "$current"
+    [ -z "$legacy" ] || printf '.%s-%s\n' "$prefix" "$legacy"
+  done < <(window_marker_prefixes)
 }

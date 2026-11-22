@@ -4573,6 +4573,173 @@ test_teardown_retains_v1_journal_when_workspace_query_ambiguous() {
   pass "teardown retains a v1 presentation journal when the workspace query is ambiguous"
 }
 
+# The watcher's per-window timer markers are keyed by the ENDPOINT, not by the
+# task id, so every other cleanup list in bin/fm-teardown.sh missed them: each
+# retired window left a .hash-, .count-, .stale-, .stale-since-, and
+# .wedge-escalations- set behind, and a leftover .stale-since- plus
+# .wedge-escalations- pair is a live wedge episode with no window behind it - the
+# watcher keeps ageing that counter and re-alerting about finished work (observed
+# up to escalation 10 on a task whose record, copy, and backlog row were gone).
+#
+# The key derives from the endpoint: bin/fm-watch-key-lib.sh owns both forms, the
+# current `v3.<sha256>` and the pre-migration `:`/`/`/`.` -> `_` suffix an
+# upgraded home still carries. Both must be retired, and only for THIS task's
+# window: a marker keyed by another endpoint may belong to a live worker, whose
+# escalation history erasing would silence a genuine wedge.
+seed_window_timer_markers() {  # <case-dir> <window>
+  local state="$1/state" window=$2 marker
+  while IFS= read -r marker; do
+    [ -n "$marker" ] || continue
+    printf '0\n' > "$state/$marker"
+  done < <(window_marker_names "$window")
+}
+
+# The marker family this cleanup owns is bin/fm-watch-key-lib.sh's inventory, so
+# these cases call it rather than restating the filenames they expect.
+. "$ROOT/bin/fm-watch-key-lib.sh"
+
+# Record a second task in the same home. A live window is one a recorded task
+# owns, which is exactly what the orphan sweep must respect, so the "leave the
+# other window alone" cases need this rather than a bare endpoint string.
+write_other_task_meta() {  # <case-dir> <task-id> <window>
+  local case_dir=$1 id=$2 window=$3
+  fm_write_meta "$case_dir/state/$id.meta" \
+    "window=$window" \
+    "endpoint_task_id=$id" \
+    "worktree=$case_dir/wt-$id" \
+    "project=$case_dir/project" \
+    "kind=ship" \
+    "mode=local-only" \
+    "spawn_gen=teardown-test-$id"
+}
+
+test_teardown_retires_own_window_timer_markers_only() {
+  local case_dir marker
+  case_dir=$(make_case retire-window-timers)
+  write_meta "$case_dir" local-only ship
+  # write_meta records the endpoint this task's markers are keyed by; a second
+  # recorded task represents work still under supervision in the same home.
+  write_other_task_meta "$case_dir" task-live "firstmate:fm-task-live"
+  seed_window_timer_markers "$case_dir" "firstmate:fm-task-x1"
+  seed_window_timer_markers "$case_dir" "firstmate:fm-task-live"
+
+  run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" \
+    || fail "retire-window-timers: teardown failed: $(cat "$case_dir/stderr")"
+
+  while IFS= read -r marker; do
+    [ -n "$marker" ] || continue
+    assert_absent "$case_dir/state/$marker" \
+      "teardown left the retired window's $marker behind, so its escalation timers keep ageing"
+  done < <(window_marker_names "firstmate:fm-task-x1")
+  while IFS= read -r marker; do
+    [ -n "$marker" ] || continue
+    assert_present "$case_dir/state/$marker" \
+      "teardown removed another live window's $marker"
+  done < <(window_marker_names "firstmate:fm-task-live")
+  pass "teardown retires its own window's whole timer family and leaves another live window's alone"
+}
+
+# A relaunch that moved the task to a new endpoint must retire the abandoned
+# window too, or the leftover timers keep alerting on the same finished task.
+# The pre-relaunch record is the only place that abandoned window is named.
+test_teardown_retires_the_window_a_relaunch_abandoned() {
+  local case_dir marker
+  case_dir=$(make_case retire-window-timers-relaunch)
+  write_meta "$case_dir" local-only ship
+  fm_write_meta "$case_dir/state/task-x1.control-relaunch.meta-prior" \
+    "window=firstmate:fm-task-x1-old" \
+    "endpoint_task_id=task-x1" \
+    "worktree=$case_dir/wt" \
+    "project=$case_dir/project" \
+    "kind=ship" \
+    "mode=local-only"
+  seed_window_timer_markers "$case_dir" "firstmate:fm-task-x1-old"
+
+  run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" \
+    || fail "retire-window-timers-relaunch: teardown failed: $(cat "$case_dir/stderr")"
+
+  while IFS= read -r marker; do
+    [ -n "$marker" ] || continue
+    assert_absent "$case_dir/state/$marker" \
+      "teardown left the window a relaunch abandoned behind"
+  done < <(window_marker_names "firstmate:fm-task-x1-old")
+  pass "teardown also retires the window a relaunch abandoned for this same task"
+}
+
+# A pre-relaunch record naming a DIFFERENT task is not this record's evidence,
+# so its window must not be read as abandoned by this task.
+test_teardown_ignores_a_prior_record_for_another_task() {
+  local case_dir marker
+  case_dir=$(make_case retire-window-timers-foreign-prior)
+  write_meta "$case_dir" local-only ship
+  fm_write_meta "$case_dir/state/task-x1.control-relaunch.meta-prior" \
+    "window=firstmate:fm-task-other" \
+    "endpoint_task_id=task-other" \
+    "worktree=$case_dir/wt" \
+    "project=$case_dir/project" \
+    "kind=ship" \
+    "mode=local-only"
+  write_other_task_meta "$case_dir" task-other "firstmate:fm-task-other"
+  seed_window_timer_markers "$case_dir" "firstmate:fm-task-other"
+
+  run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" \
+    || fail "retire-window-timers-foreign-prior: teardown failed: $(cat "$case_dir/stderr")"
+
+  while IFS= read -r marker; do
+    [ -n "$marker" ] || continue
+    assert_present "$case_dir/state/$marker" \
+      "teardown retired a window named only by another task's pre-relaunch record"
+  done < <(window_marker_names "firstmate:fm-task-other")
+  pass "teardown ignores a pre-relaunch record that names a different task"
+}
+
+# The 240-family backlog a home already carries: legacy-form families whose
+# endpoint no recorded task owns any more. Today's watcher never writes that form
+# again, so a family the registry does not claim is unambiguous rubbish - while a
+# family whose endpoint IS still recorded belongs to a live task and must stay.
+test_teardown_prunes_orphan_legacy_window_timers_only() {
+  local case_dir live_window orphan_window marker
+  case_dir=$(make_case prune-orphan-window-timers)
+  write_meta "$case_dir" local-only ship
+  # Deliberately NOT this task's own endpoint (write_meta records
+  # firstmate:fm-task-x1), or the per-task retirement would legitimately remove
+  # it and the sweep would never be the thing under test.
+  live_window="firstmate:fm-task-live"
+  orphan_window="default:w1:p8B"
+  write_other_task_meta "$case_dir" task-live "$live_window"
+  seed_window_timer_markers "$case_dir" "$live_window"
+  seed_window_timer_markers "$case_dir" "$orphan_window"
+  # A task-keyed marker borrows the paused- prefix but is not a window marker;
+  # its owner retires it with the task.
+  printf '0\n' > "$case_dir/state/.paused-overdue-task-elsewhere"
+
+  run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" \
+    || fail "prune-orphan-window-timers: teardown failed: $(cat "$case_dir/stderr")"
+
+  while IFS= read -r marker; do
+    [ -n "$marker" ] || continue
+    case "$marker" in
+      # The current-form key of a window the task does not own is not this
+      # cleanup's evidence: only the legacy form spells its endpoint.
+      *-v3.*) continue ;;
+    esac
+    assert_absent "$case_dir/state/$marker" \
+      "the orphan legacy window timer $marker survived the sweep"
+  done < <(window_marker_names "$orphan_window")
+  # The current-form key alone is never evidence of ownership: only a legacy-form
+  # name spells its endpoint, which is what makes this sweep decidable at all.
+  assert_present "$case_dir/state/.wedge-escalations-$(window_key "$orphan_window")" \
+    "the sweep removed a current-form marker it cannot attribute to a recorded window"
+  while IFS= read -r marker; do
+    [ -n "$marker" ] || continue
+    assert_present "$case_dir/state/$marker" \
+      "the sweep removed a live task's window timer $marker"
+  done < <(window_marker_names "$live_window")
+  assert_present "$case_dir/state/.paused-overdue-task-elsewhere" \
+    "the sweep removed a task-keyed marker that merely shares a window prefix"
+  pass "teardown sweeps legacy window timers no recorded task owns and keeps every live or task-keyed marker"
+}
+
 # --- Fix 1: conclude/abort the task's own parked no-mistakes run before the
 # worker is removed, and Fix 2: reap leaked descendant processes rooted under
 # the task's own worktree/tasktmp - both exercised through the real teardown
@@ -6641,6 +6808,10 @@ test_teardown_retains_journal_bound_to_another_pane
 test_teardown_retires_v1_journal_when_projected_workspace_gone
 test_teardown_retains_v1_journal_when_projected_workspace_present
 test_teardown_retains_v1_journal_when_workspace_query_ambiguous
+test_teardown_retires_own_window_timer_markers_only
+test_teardown_retires_the_window_a_relaunch_abandoned
+test_teardown_ignores_a_prior_record_for_another_task
+test_teardown_prunes_orphan_legacy_window_timers_only
 test_squash_merged_branch_deleted_allows
 test_squash_merged_pr_allows_when_head_ancestor_of_pr_head
 test_no_pr_recorded_discovers_merged_pr_by_branch_allows
