@@ -96,3 +96,32 @@ window_marker_names() {  # <window>
     [ -z "$legacy" ] || printf '.%s-%s\n' "$prefix" "$legacy"
   done < <(window_marker_prefixes)
 }
+
+# window_marker_clear: remove one window's whole marker family from <state-dir>.
+#
+# This is the ONE place that acts on the inventory, so the two boundaries that
+# need it - a window being created (bin/fm-spawn.sh) and a window being retired
+# (bin/fm-teardown.sh) - cannot drift from the family list or from each other.
+# Both key forms go: a marker under either form describes the same endpoint.
+#
+# Clearing at CREATION is what makes a reused window safe. Window names are
+# reused (tmux pins the name `fm-<id>`, and a re-dispatched task keeps its id),
+# so a task that wedged before its retirement leaves an over-age .stale-since-
+# and an inherited escalation count that a NEW incarnation would resume from -
+# alerting about work that has not started. A destroy-time clear that is skipped
+# once (killed process, abnormal exit) poisons the next incarnation; a
+# create-time clear leaves the new one clean however the last one ended. Neither
+# boundary is sufficient alone, so both call this.
+#
+# Only the named window is touched. A marker keyed by another endpoint may
+# belong to a live worker, whose escalation history erasing would silence a
+# genuine wedge.
+window_marker_clear() {  # <state-dir> <window>
+  local state=$1 win=$2 name
+  [ -n "$state" ] && [ -n "$win" ] || return 0
+  [ -d "$state" ] && [ ! -L "$state" ] || return 0
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    rm -f -- "$state/$name" || return 1
+  done < <(window_marker_names "$win")
+}

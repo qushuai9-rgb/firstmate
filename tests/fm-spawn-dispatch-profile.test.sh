@@ -2621,6 +2621,75 @@ SH
   done
 }
 
+# The window a task is about to run in must start with no supervision history.
+# Window names are reused - tmux pins `fm-<id>`, and a re-dispatched task keeps
+# its id - so timers left by an earlier incarnation are read by the watcher as
+# this task's own: an over-age .stale-since- escalates at once and an inherited
+# .wedge-escalations- count resumes mid-ladder, alerting about work that has not
+# started. Clearing at the creation boundary makes that safe however the previous
+# task ended.
+seed_window_timers() {  # <state-dir> <window>
+  local state=$1 window=$2 name
+  # shellcheck source=bin/fm-watch-key-lib.sh disable=SC1091
+  . "$ROOT/bin/fm-watch-key-lib.sh"
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    printf 'stale\n' > "$state/$name"
+  done < <(window_marker_names "$window")
+}
+
+assert_window_timers() {  # <state-dir> <window> <present|absent> <why>
+  local state=$1 window=$2 want=$3 why=$4 name
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    if [ "$want" = absent ]; then
+      assert_absent "$state/$name" "$why ($name)"
+    else
+      assert_present "$state/$name" "$why ($name)"
+    fi
+  done < <(window_marker_names "$window")
+}
+
+test_spawn_clears_the_new_windows_stale_timers() {
+  local rec task_id out status window
+  task_id="window-timers-z40"
+  rec=$(make_spawn_case window-timers pi "$task_id")
+  read_case_record "$rec"
+  # Mirror the tmux endpoint a real spawn records, so the leftover markers below
+  # are keyed exactly as a re-dispatched task's window would be.
+  window="firstmate:fm-$task_id"
+  seed_window_timers "$HOME_DIR/state" "$window"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$task_id" "$PROJ_DIR")
+  status=$?
+  expect_code 0 "$status" "window-timers spawn should succeed"$'\n'"$out"
+
+  assert_window_timers "$HOME_DIR/state" "$window" absent \
+    "spawn left a reused window's stale supervision timers in place"
+  pass "spawn clears the stale supervision timers of the window it launches into"
+}
+
+test_spawn_clears_only_its_own_windows_timers() {
+  local rec task_id out status own other
+  task_id="window-timers-scope-z41"
+  rec=$(make_spawn_case window-timers-scope pi "$task_id")
+  read_case_record "$rec"
+  own="firstmate:fm-$task_id"
+  other="firstmate:fm-some-other-live-task"
+  seed_window_timers "$HOME_DIR/state" "$own"
+  seed_window_timers "$HOME_DIR/state" "$other"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$task_id" "$PROJ_DIR")
+  status=$?
+  expect_code 0 "$status" "window-timers-scope spawn should succeed"$'\n'"$out"
+
+  assert_window_timers "$HOME_DIR/state" "$own" absent \
+    "spawn did not clear its own window's stale timers"
+  assert_window_timers "$HOME_DIR/state" "$other" present \
+    "spawn erased another window's supervision state"
+  pass "spawn clears its own window's stale timers and leaves another window's alone"
+}
+
 test_launch_environment_allowlist
 test_launch_environment_invalid_config_refuses
 test_launch_environment_inaccessible_config_refuses
@@ -3114,5 +3183,7 @@ test_keep_ai_trailers_omits_attribution_settings_and_strip_hooks
 test_keep_ai_trailers_reaches_secondmate_crew_launches
 test_claude_secondmate_launch_carries_the_attribution_policy
 test_active_dispatch_profile_does_not_block_secondmate_launch
+test_spawn_clears_the_new_windows_stale_timers
+test_spawn_clears_only_its_own_windows_timers
 
 echo "# all fm-spawn-dispatch-profile tests passed"

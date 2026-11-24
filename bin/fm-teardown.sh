@@ -3607,13 +3607,9 @@ teardown_window_of_prior_record() {  # <path>
 }
 
 teardown_retire_window_timer_markers() {  # <state-dir> <window>
-  local state=$1 window=$2 name
-  [ -n "$window" ] || return 0
-  [ -d "$state" ] && [ ! -L "$state" ] || return 0
-  while IFS= read -r name; do
-    [ -n "$name" ] || continue
-    rm -f -- "$state/$name" || return 1
-  done < <(window_marker_names "$window")
+  # The family inventory and the removal live in bin/fm-watch-key-lib.sh, which
+  # bin/fm-spawn.sh calls at the window-creation boundary for the same purpose.
+  window_marker_clear "$1" "$2"
 }
 
 # teardown_prune_orphan_window_timer_markers: retire per-window timer families

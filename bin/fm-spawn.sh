@@ -948,6 +948,10 @@ fi
 . "$SCRIPT_DIR/fm-ff-lib.sh"
 # shellcheck source=bin/fm-wake-lib.sh
 . "$SCRIPT_DIR/fm-wake-lib.sh"
+# Per-window watcher marker identity and the family inventory a new window must
+# start clean under (bin/fm-watch-key-lib.sh owns both).
+# shellcheck source=bin/fm-watch-key-lib.sh
+. "$SCRIPT_DIR/fm-watch-key-lib.sh"
 # shellcheck source=bin/fm-classify-lib.sh
 . "$SCRIPT_DIR/fm-classify-lib.sh"
 fm_backlog_directory_present "$STATE" "state directory" || {
@@ -7309,6 +7313,23 @@ fi
 META_WINDOW=$T
 [ "$BACKEND" = orca ] && META_WINDOW=$W
 [ "$BACKEND" = t3code ] && META_WINDOW=$W
+# The window this task is about to run in must start with NO supervision history.
+# Window names are reused - tmux pins the name `fm-<id>`, and a re-dispatched
+# task keeps its id - so a window that wedged before its last retirement can
+# leave an over-age .stale-since- and an inherited .wedge-escalations- count that
+# this brand-new incarnation would resume from, alerting about work that has not
+# started yet (bin/fm-watch-key-lib.sh's window_marker_clear owns the reasoning
+# and the family inventory). Clearing HERE, at the creation boundary, is what
+# makes that safe however the previous task ended; bin/fm-teardown.sh clears the
+# same family at the retirement boundary, and both call that one shared helper.
+# A relaunch deliberately keeps the window it already runs in, so it is NOT a new
+# window: its running wedge evidence still describes the same pane.
+if [ "$RELAUNCH" -eq 0 ]; then
+  window_marker_clear "$STATE" "$META_WINDOW" || {
+    echo "error: could not clear the stale supervision timers of $META_WINDOW; refusing to launch a task that would inherit another window's wedge state" >&2
+    exit 1
+  }
+fi
 SPAWN_GEN="s$(date +%s).${BASHPID:-$$}.$RANDOM"
 SPAWN_META_PATH="$STATE/$ID.meta"
 if [ "$SPAWN_META_LOCK_HELD" != 1 ]; then
