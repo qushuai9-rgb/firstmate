@@ -183,6 +183,57 @@ EOF
   pass "an Orca-backed fresh spawn enters the worktree Orca created for it, instead of hard-refusing on the post-launch proof"
 }
 
+# The per-window supervision timers are keyed by the endpoint the watcher resolves
+# from the record, which for Orca is its terminal handle - not the `fm-<id>`
+# window alias the record also carries. A creation-boundary clear aimed at the
+# alias would leave the endpoint-keyed family from a previous incarnation in
+# place, so a fresh task would resume its over-age stale timer and escalation
+# level. bin/fm-watch-key-lib.sh owns both the key and the family inventory.
+test_orca_spawn_clears_the_endpoint_keyed_timers() {
+  local case_dir home id=orca-window-timers-a3 fb out status endpoint marker
+  case_dir="$TMP_ROOT/window-timers"
+  home="$case_dir/home"
+  mkdir -p "$home/data" "$home/projects" "$home/state" "$home/config"
+  touch "$home/state/.last-watcher-beat"
+  printf 'codex\n' > "$home/config/crew-harness"
+  printf 'manual\n' > "$home/config/backlog-backend"
+  fm_git_init_commit "$case_dir/project"
+  mkdir -p "$home/data/$id"
+  cat > "$home/data/$id/brief.md" <<EOF
+# Task
+## Captain's intent
+Prove a reused Orca endpoint starts with no supervision history.
+
+## Firstmate spec
+Confirm the spawn clears the timers keyed by the endpoint it records.
+EOF
+  fb=$(make_orca_fakebin "$case_dir")
+  # shellcheck source=bin/fm-watch-key-lib.sh disable=SC1091
+  . "$ROOT/bin/fm-watch-key-lib.sh"
+  while IFS= read -r marker; do
+    [ -n "$marker" ] || continue
+    printf '9\n' > "$home/state/$marker"
+  done < <(window_marker_names term-1)
+
+  out=$(FM_ROOT_OVERRIDE='' FM_HOME="$home" HOME="$case_dir/user-home" \
+    FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
+    FM_PROJECTS_OVERRIDE="$home/projects" FM_CONFIG_OVERRIDE="$home/config" \
+    FM_SPAWN_NO_GUARD=1 FM_TEST_ORCA_DIR="$case_dir" PATH="$fb:$PATH" \
+    "$SPAWN" "$id" "$case_dir/project" --mode no-mistakes --yolo off --backend orca 2>&1)
+  status=$?
+
+  expect_code 0 "$status" "an Orca-backed spawn should succeed"$'\n'"$out"
+  endpoint=$(bash -c '. "$1"; fm_backend_target_of_meta "$2"' _ "$ROOT/bin/fm-backend.sh" "$home/state/$id.meta")
+  [ "$endpoint" = term-1 ] \
+    || fail "the Orca record should resolve to its terminal handle, got '$endpoint'"
+  while IFS= read -r marker; do
+    [ -n "$marker" ] || continue
+    assert_absent "$home/state/$marker" \
+      "the spawn left the reused endpoint's $marker behind, so the new task inherits its escalation history"
+  done < <(window_marker_names "$endpoint")
+  pass "an Orca spawn clears the timers keyed by its recorded terminal handle, not the fm-<id> alias"
+}
+
 test_orca_relaunch_is_refused_before_the_worktree_carveout_could_run() {
   local case_dir home proj wt id=orca-relaunch-a2 out status
   case_dir="$TMP_ROOT/relaunch"
@@ -879,6 +930,7 @@ test_orca_launch_file_delete_failure_keeps_terminal
 test_orca_pane_wins_launch_file_race_at_deadline
 test_orca_snapshot_keeps_raw_bytes_tmux_reports
 test_orca_fresh_spawn_enters_the_worktree_it_created
+test_orca_spawn_clears_the_endpoint_keyed_timers
 test_orca_relaunch_is_refused_before_the_worktree_carveout_could_run
 
 echo "# all fm-spawn-orca-worktree tests passed"

@@ -23,7 +23,10 @@
 #   - window_key_legacy: the pre-migration suffix that only turned `:` and `/`
 #     and `.` into `_`. A home upgraded across that change still carries these
 #     files, and the header below calls leaving them in place safe - only
-#     cleanup that knows the window is finished may remove them.
+#     cleanup that knows the window is finished may remove them. That form is
+#     unbounded, so a long endpoint's legacy name can exceed NAME_MAX; no such
+#     file can exist, and window_marker_names omits it rather than hand callers
+#     a name rm must refuse.
 #
 # Obsolete markers are not garbage-collected automatically. For optional cleanup,
 # stop both the watcher and away daemon, then archive the obsolete files outside
@@ -82,10 +85,13 @@ window_marker_prefixes() {
 }
 
 # window_marker_names: every per-window marker filename for ONE endpoint, one
-# per line with no directory, in both key forms. Callers join these with the
-# state directory they own.
+# per line with no directory, in both key forms. A legacy name that would exceed
+# NAME_MAX is omitted: the form is unbounded, so a supported long endpoint can
+# reach it, and a file that long cannot exist to be removed. Callers join these
+# with the state directory they own.
 window_marker_names() {  # <window>
-  local win=$1 current legacy prefix
+  local win=$1 current legacy prefix name
+  local LC_ALL=C
   [ -n "$win" ] || return 1
   current=$(window_key "$win") || return 1
   legacy=$(window_key_legacy "$win")
@@ -93,7 +99,11 @@ window_marker_names() {  # <window>
   while IFS= read -r prefix; do
     [ -n "$prefix" ] || continue
     printf '.%s-%s\n' "$prefix" "$current"
-    [ -z "$legacy" ] || printf '.%s-%s\n' "$prefix" "$legacy"
+    [ -z "$legacy" ] || {
+      name=".$prefix-$legacy"
+      [ "${#name}" -le 255 ] || continue
+      printf '%s\n' "$name"
+    }
   done < <(window_marker_prefixes)
 }
 

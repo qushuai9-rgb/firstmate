@@ -2622,9 +2622,9 @@ SH
 }
 
 # The window a task is about to run in must start with no supervision history.
-# Window names are reused - tmux pins `fm-<id>`, and a re-dispatched task keeps
-# its id - so timers left by an earlier incarnation are read by the watcher as
-# this task's own: an over-age .stale-since- escalates at once and an inherited
+# Endpoints are reused - tmux pins the name `fm-<id>`, and a re-dispatched task
+# keeps its id - so timers left by an earlier incarnation are read by the watcher
+# as this task's own: an over-age .stale-since- escalates at once and an inherited
 # .wedge-escalations- count resumes mid-ladder, alerting about work that has not
 # started. Clearing at the creation boundary makes that safe however the previous
 # task ended.
@@ -2650,8 +2650,15 @@ assert_window_timers() {  # <state-dir> <window> <present|absent> <why>
   done < <(window_marker_names "$window")
 }
 
+# The endpoint the watcher and teardown key a window's marker family by, resolved
+# from the record the spawn wrote exactly as they resolve it. Clearing a
+# non-tmux record's `fm-<id>` window alias instead would touch nothing.
+resolved_endpoint() {  # <meta-file>
+  bash -c '. "$1"; fm_backend_target_of_meta "$2"' _ "$ROOT/bin/fm-backend.sh" "$1"
+}
+
 test_spawn_clears_the_new_windows_stale_timers() {
-  local rec task_id out status window
+  local rec task_id out status window endpoint
   task_id="window-timers-z40"
   rec=$(make_spawn_case window-timers pi "$task_id")
   read_case_record "$rec"
@@ -2664,13 +2671,16 @@ test_spawn_clears_the_new_windows_stale_timers() {
   status=$?
   expect_code 0 "$status" "window-timers spawn should succeed"$'\n'"$out"
 
-  assert_window_timers "$HOME_DIR/state" "$window" absent \
+  endpoint=$(resolved_endpoint "$HOME_DIR/state/$task_id.meta")
+  [ "$endpoint" = "$window" ] \
+    || fail "the recorded task resolves to endpoint '$endpoint', not the launched window '$window'"
+  assert_window_timers "$HOME_DIR/state" "$endpoint" absent \
     "spawn left a reused window's stale supervision timers in place"
-  pass "spawn clears the stale supervision timers of the window it launches into"
+  pass "spawn clears the stale supervision timers of the endpoint it launches into"
 }
 
 test_spawn_clears_only_its_own_windows_timers() {
-  local rec task_id out status own other
+  local rec task_id out status own other endpoint
   task_id="window-timers-scope-z41"
   rec=$(make_spawn_case window-timers-scope pi "$task_id")
   read_case_record "$rec"
@@ -2683,7 +2693,10 @@ test_spawn_clears_only_its_own_windows_timers() {
   status=$?
   expect_code 0 "$status" "window-timers-scope spawn should succeed"$'\n'"$out"
 
-  assert_window_timers "$HOME_DIR/state" "$own" absent \
+  endpoint=$(resolved_endpoint "$HOME_DIR/state/$task_id.meta")
+  [ "$endpoint" = "$own" ] \
+    || fail "the recorded task resolves to endpoint '$endpoint', not the launched window '$own'"
+  assert_window_timers "$HOME_DIR/state" "$endpoint" absent \
     "spawn did not clear its own window's stale timers"
   assert_window_timers "$HOME_DIR/state" "$other" present \
     "spawn erased another window's supervision state"

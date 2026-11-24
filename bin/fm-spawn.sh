@@ -7314,19 +7314,23 @@ META_WINDOW=$T
 [ "$BACKEND" = orca ] && META_WINDOW=$W
 [ "$BACKEND" = t3code ] && META_WINDOW=$W
 # The window this task is about to run in must start with NO supervision history.
-# Window names are reused - tmux pins the name `fm-<id>`, and a re-dispatched
-# task keeps its id - so a window that wedged before its last retirement can
-# leave an over-age .stale-since- and an inherited .wedge-escalations- count that
-# this brand-new incarnation would resume from, alerting about work that has not
+# Endpoints are reused - tmux pins the name `fm-<id>`, and a re-dispatched task
+# keeps its id - so an endpoint that wedged before its last retirement can leave
+# an over-age .stale-since- and an inherited .wedge-escalations- count that this
+# brand-new incarnation would resume from, alerting about work that has not
 # started yet (bin/fm-watch-key-lib.sh's window_marker_clear owns the reasoning
-# and the family inventory). Clearing HERE, at the creation boundary, is what
-# makes that safe however the previous task ended; bin/fm-teardown.sh clears the
-# same family at the retirement boundary, and both call that one shared helper.
-# A relaunch deliberately keeps the window it already runs in, so it is NOT a new
-# window: its running wedge evidence still describes the same pane.
+# and the family inventory). The family is keyed by the endpoint the watcher
+# resolves from the record's backend fields, so $T - the endpoint this spawn just
+# provisioned, and the same value bin/fm-teardown.sh passes - is what is cleared,
+# never the `fm-<id>` alias an orca or t3code record also carries.
+# Clearing HERE, at the creation boundary, is what makes that safe however the
+# previous task ended; bin/fm-teardown.sh clears the same family at the
+# retirement boundary, and both call that one shared helper.
+# A relaunch deliberately keeps the endpoint it already runs in, so it is NOT a
+# new window: its running wedge evidence still describes the same pane.
 if [ "$RELAUNCH" -eq 0 ]; then
-  window_marker_clear "$STATE" "$META_WINDOW" || {
-    echo "error: could not clear the stale supervision timers of $META_WINDOW; refusing to launch a task that would inherit another window's wedge state" >&2
+  window_marker_clear "$STATE" "$T" || {
+    echo "error: could not clear the stale supervision timers of $T; refusing to launch a task that would inherit another endpoint's wedge state" >&2
     exit 1
   }
 fi

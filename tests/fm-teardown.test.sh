@@ -224,12 +224,13 @@ SH
   printf '%s\n' "$case_dir"
 }
 
-# Write a meta file for the task. Args: case_dir mode kind [worktree]
+# Write a meta file for the task. Args: case_dir mode kind [worktree] [window]
 write_meta() {
   local case_dir=$1 mode=$2 kind=$3
   local wt=${4:-$case_dir/wt}
+  local window=${5:-firstmate:fm-task-x1}
   fm_write_meta "$case_dir/state/task-x1.meta" \
-    "window=firstmate:fm-task-x1" \
+    "window=$window" \
     "endpoint_task_id=task-x1" \
     "worktree=$wt" \
     "project=$case_dir/project" \
@@ -4740,6 +4741,33 @@ test_teardown_prunes_orphan_legacy_window_timers_only() {
   pass "teardown sweeps legacy window timers no recorded task owns and keeps every live or task-keyed marker"
 }
 
+# A supported long endpoint (a 250-byte tmux session name, which the tmux
+# endpoint shape admits, plus the pinned `fm-<id>` pane name) makes the legacy key
+# form, which does not bound its length, overflow NAME_MAX. No file that long can
+# exist, but `rm -f` on such a name fails with ENAMETOOLONG and the nonzero status
+# would abort a teardown whose endpoint and worktree are already destroyed. The
+# current-form family must still be retired.
+test_teardown_tolerates_a_legacy_key_over_name_max() {
+  local case_dir window key
+  case_dir=$(make_case retire-long-endpoint-window-timers)
+  window="$(printf '%250s' '' | tr ' ' s):fm-task-x1"
+  [ "${#window}" -ge 260 ] || fail "long endpoint fixture is too short: ${#window} bytes"
+  write_meta "$case_dir" local-only ship "$case_dir/wt" "$window"
+  seed_window_timer_markers "$case_dir" "$window"
+  key=$(window_key "$window")
+
+  run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" \
+    || fail "retire-long-endpoint-window-timers: teardown failed: $(cat "$case_dir/stderr")"
+
+  assert_absent "$case_dir/state/.wedge-escalations-$key" \
+    "a long endpoint's current-form escalation count survived teardown"
+  assert_absent "$case_dir/state/.stale-since-$key" \
+    "a long endpoint's current-form stale timer survived teardown"
+  assert_absent "$case_dir/state/task-x1.meta" \
+    "retire-long-endpoint-window-timers: teardown did not complete"
+  pass "teardown retires a long endpoint's current-form timers instead of failing on its over-long legacy name"
+}
+
 # --- Fix 1: conclude/abort the task's own parked no-mistakes run before the
 # worker is removed, and Fix 2: reap leaked descendant processes rooted under
 # the task's own worktree/tasktmp - both exercised through the real teardown
@@ -6812,6 +6840,7 @@ test_teardown_retires_own_window_timer_markers_only
 test_teardown_retires_the_window_a_relaunch_abandoned
 test_teardown_ignores_a_prior_record_for_another_task
 test_teardown_prunes_orphan_legacy_window_timers_only
+test_teardown_tolerates_a_legacy_key_over_name_max
 test_squash_merged_branch_deleted_allows
 test_squash_merged_pr_allows_when_head_ancestor_of_pr_head
 test_no_pr_recorded_discovers_merged_pr_by_branch_allows
