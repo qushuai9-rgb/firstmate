@@ -3649,9 +3649,14 @@ teardown_prune_orphan_window_timer_markers() {  # <state-dir>
   local state=$1 lock prefix family base candidate window owner killed=0
   local -a recorded=()
   [ -d "$state" ] && [ ! -L "$state" ] || return 0
+  # Contended means a spawn is mid-publication: skip the sweep entirely rather
+  # than wait. This is the last step of a teardown that has already closed the
+  # endpoint, returned the copy, and removed the record, so blocking it behind an
+  # unrelated task's spawn is a stall, not a safety property - and taking the lock
+  # away from that spawn and then releasing it would drop the holder's own claim.
   lock=$(fm_task_set_lock_path "$state") || return 0
-  fm_lock_acquire_wait "$lock" || {
-    echo "warning: could not lock $state to prune orphan window timers; leaving them in place" >&2
+  fm_lock_try_acquire "$lock" || {
+    echo "warning: $state's task set is locked by a concurrent spawn; leaving orphan window timers for a later teardown" >&2
     return 0
   }
   # Every endpoint any recorded task in this home names. Read under the lock so a

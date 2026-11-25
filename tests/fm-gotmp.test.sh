@@ -74,6 +74,9 @@ SH
   # ownership are sourced by teardown.
   ln -s "$ROOT/bin/fm-control-lib.sh" "$fake/bin/fm-control-lib.sh"
   ln -s "$ROOT/bin/fm-classify-lib.sh" "$fake/bin/fm-classify-lib.sh"
+  # fm-watch-key-lib.sh: the per-window marker identity and family inventory
+  # teardown retires a finished endpoint's timers from.
+  ln -s "$ROOT/bin/fm-watch-key-lib.sh" "$fake/bin/fm-watch-key-lib.sh"
   # fm-timeout-lib.sh: the shared hard bound fm-classify-lib.sh sources for the
   # wedge detector's bounded worktree write probe.
   ln -s "$ROOT/bin/fm-timeout-lib.sh" "$fake/bin/fm-timeout-lib.sh"
@@ -187,6 +190,9 @@ SH
   ln -s "$ROOT/bin/fm-lease-lib.sh" "$fake/bin/fm-lease-lib.sh"
   ln -s "$ROOT/bin/fm-control-lib.sh" "$fake/bin/fm-control-lib.sh"
   ln -s "$ROOT/bin/fm-classify-lib.sh" "$fake/bin/fm-classify-lib.sh"
+  # fm-watch-key-lib.sh: the per-window marker identity and family inventory
+  # teardown retires a finished endpoint's timers from.
+  ln -s "$ROOT/bin/fm-watch-key-lib.sh" "$fake/bin/fm-watch-key-lib.sh"
   # fm-timeout-lib.sh: the shared hard bound fm-classify-lib.sh sources for the
   # wedge detector's bounded worktree write probe.
   ln -s "$ROOT/bin/fm-timeout-lib.sh" "$fake/bin/fm-timeout-lib.sh"
