@@ -16,25 +16,30 @@
 # the family list: a family missing from a copy outlives the window it belongs to,
 # and the timer it leaves behind keeps ageing against a window nobody supervises.
 #
-# Two key forms exist and both must be retired WITH their window, because a
-# window name is never revived and nothing else can ever prove such a file dead:
+# Two key forms exist and both must be retired with a finished endpoint. Window
+# names ARE reused (tmux pins `fm-<id>` and a re-dispatched task keeps its id), so
+# a leftover marker is read as the next incarnation's own, and no watcher will
+# ever write the legacy form again - only cleanup that knows the endpoint is
+# finished can ever prove such a file dead:
 #   - window_key: the current `v3.` suffix, which the watcher and away daemon
 #     write every family under today;
 #   - window_key_legacy: the pre-migration suffix that only turned `:` and `/`
 #     and `.` into `_`. A home upgraded across that change still carries these
-#     files, and the header below calls leaving them in place safe - only
-#     cleanup that knows the window is finished may remove them. That form is
-#     unbounded, so a long endpoint's legacy name can exceed NAME_MAX; no such
-#     file can exist, and window_marker_names omits it rather than hand callers
-#     a name rm must refuse.
+#     files, which only a boundary that knows the endpoint is finished can ever
+#     retire. That form is unbounded, so a long endpoint's legacy name can exceed
+#     NAME_MAX; no such file can exist, and window_marker_names omits it rather
+#     than hand callers a name rm must refuse.
 #
-# Obsolete markers are not garbage-collected automatically. For optional cleanup,
-# stop both the watcher and away daemon, then archive the obsolete files outside
-# STATE (or remove the reviewed files). Limit this to the per-window marker
-# families window_marker_prefixes prints. Preserve every current filename
-# containing -v3.; only legacy/v2 suffixes in those families are obsolete.
-# bin/fm-teardown.sh retires a finished window's whole family, including its
-# legacy form, and prunes legacy-form families no recorded window owns.
+# These families are collected automatically at both boundaries: bin/fm-spawn.sh
+# clears every family for the endpoint it is about to run in, and
+# bin/fm-teardown.sh retires a finished endpoint's whole family, including its
+# legacy form, then prunes legacy-form families no recorded endpoint owns. The
+# manual procedure below is what remains for a home whose boundaries were both
+# skipped. For optional cleanup, stop both the watcher and away daemon, then
+# archive the obsolete files outside STATE (or remove the reviewed files). Limit
+# this to the per-window marker families window_marker_prefixes prints. Preserve
+# every current filename containing -v3.; only legacy/v2 suffixes in those
+# families are obsolete.
 # Do not bulk-clear STATE: task records, wake queues, and task-keyed .subsuper-*
 # markers are outside this cleanup. Leaving obsolete files in place is safe.
 window_key() {  # <window>

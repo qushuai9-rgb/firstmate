@@ -3623,13 +3623,18 @@ teardown_retire_window_timer_markers() {  # <state-dir> <window>
 # fresh task's markers could be judged orphaned and erased moments before its own
 # record landed.
 #
-# Scope is deliberately the LEGACY key form only. Determining a v3 key's endpoint
-# would mean hashing candidates, while a legacy-form family already spells its
-# endpoint in its own filename - and that form is exactly the population nothing
-# else can ever prove dead, since today's watcher never writes it again. Every
-# legacy family whose window no live record names is unambiguous rubbish. It is
-# removed only when the window encoded in the filename does not resolve to any
-# recorded endpoint, so a live task's migrated-away markers are never touched.
+# Scope is deliberately the LEGACY key form only. A v3 key IS attributable -
+# ownership of either form is decidable the same way, by comparing the key with
+# every recorded endpoint's key under that form - so this sweep's scope is a
+# choice about which population it drains, not a statement that v3 cannot be
+# judged. The legacy form is the one this sweep exists for: it already spells its
+# endpoint in its own filename, it is exactly the population nothing else can
+# ever prove dead because today's watcher never writes it again, and every
+# legacy family whose endpoint no live record names is unambiguous rubbish. A v3
+# family is retired by the per-task retirement above, which knows which endpoint
+# is finished. It is removed only when the endpoint encoded in the filename does
+# not resolve to any recorded endpoint, so a live task's migrated-away markers
+# are never touched.
 #
 # Ownership is decided by re-deriving each recorded endpoint's legacy form and
 # comparing it whole: a legacy key turns `:`, `/`, and `.` into underscores, so a
